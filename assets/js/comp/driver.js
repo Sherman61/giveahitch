@@ -1,3 +1,5 @@
+import { logError } from '../utils/logger.js';
+
 // /assets/js/components/driver.js
 const esc = s => s ? String(s).replace(/[&<>"']/g, m => (
   {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]
@@ -20,15 +22,46 @@ const contactHtml = (phone, whatsapp) => {
 };
 
 async function postJSON(url, body){
-  const res = await fetch(url, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    credentials:'same-origin',
-    body: JSON.stringify({...body, csrf: window.CSRF})
-  });
-  const j = await res.json().catch(()=>({ok:false}));
-  if(!res.ok || !j.ok) throw new Error(j.error||'request_failed');
-  return j;
+  let res;
+  let payload;
+  try {
+    res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
+      body: JSON.stringify({...body, csrf: window.CSRF})
+    });
+  } catch (networkError) {
+    logError('driver:post_json_network', networkError, { url, body });
+    const err = new Error('network_error');
+    err.code = 'network_error';
+    throw err;
+  }
+
+  payload = await res.json().catch(()=>({ ok:false }));
+  if(!res.ok || !payload?.ok) {
+    const err = new Error(payload?.error || 'request_failed');
+    err.code = payload?.error || 'request_failed';
+    err.status = res.status;
+    err.payload = payload;
+    logError('driver:post_json_failed', err, { url, body, status: res.status, payload });
+    throw err;
+  }
+  return payload;
+}
+
+function statusErrorMessage(action, err){
+  if (!err || typeof err !== 'object') return `Failed to ${action}.`;
+  switch(err.code){
+    case 'illegal_transition':
+      return 'This ride was already updated. Refresh the page to see the latest status.';
+    case 'not_found':
+      return 'This ride could not be found. It might have been removed or cancelled.';
+    case 'network_error':
+      return 'Network error. Please check your connection and try again.';
+    default:
+      return `Failed to ${action}.`;
+  }
 }
 
 function ratingStarRow(onPick){
@@ -88,7 +121,7 @@ function cardForResponded(m){
     w.textContent='Withdraw';
     w.addEventListener('click', async ()=>{
       try{ await postJSON(`${window.API_BASE}/match_withdraw.php`, { match_id: m.match_id }); card.remove(); }
-      catch(e){ alert('Withdraw failed'); }
+      catch(e){ logError('driver:withdraw_failed', e, { matchId: m.match_id }); alert('Withdraw failed'); }
     });
     actions.appendChild(w);
   }
@@ -99,8 +132,15 @@ function cardForResponded(m){
     c.className='btn btn-sm btn-primary';
     c.textContent='Complete';
     c.addEventListener('click', async ()=>{
-      try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, { ride_id: m.ride_id, status:'completed' }); location.reload(); }
-      catch(e){ alert('Complete failed'); }
+      try{
+        await postJSON(`${window.API_BASE}/ride_set_status.php`, { ride_id: m.ride_id, status:'completed' });
+        location.reload();
+      }
+      catch(e){
+        logError('driver:complete_failed', e, { rideId: m.ride_id });
+        alert(statusErrorMessage('complete the ride', e));
+        if (e.code === 'illegal_transition') location.reload();
+      }
     });
     actions.appendChild(c);
   }
@@ -117,7 +157,7 @@ function cardForResponded(m){
           const role   = amDriver ? 'passenger' : 'driver';
           await postJSON(`${window.API_BASE}/rate_submit.php`, { ride_id: m.ride_id, target_user_id: target, stars, role });
           location.reload();
-        }catch(e){ alert('Rating failed'); }
+        }catch(e){ logError('driver:rating_failed', e, { rideId: m.ride_id, matchId: m.match_id }); alert('Rating failed'); }
       }));
     });
     actions.appendChild(r);
@@ -153,6 +193,7 @@ async function render(el){
     const res = await fetch(`${window.API_BASE}/my_matches.php`, { credentials:'same-origin' });
     data = await res.json();
   } catch (e) {
+    logError('driver:fetch_failed', e);
     msg.className='alert alert-danger'; msg.textContent='Failed to load your responded rides.'; msg.classList.remove('d-none'); return;
   }
   if (!data?.ok || !Array.isArray(data.items)){ msg.className='alert alert-danger'; msg.textContent='Bad data.'; msg.classList.remove('d-none'); return; }

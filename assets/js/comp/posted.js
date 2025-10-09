@@ -1,3 +1,5 @@
+import { logError } from '../utils/logger.js';
+
 // /assets/js/components/posted.js
 const esc = s => s ? String(s).replace(/[&<>"']/g, m => (
   {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]
@@ -11,15 +13,46 @@ const badge = status => {
 
 // small helpers
 async function postJSON(url, body){
-  const res = await fetch(url, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    credentials:'same-origin',
-    body: JSON.stringify({...body, csrf: window.CSRF})
-  });
-  const j = await res.json().catch(()=>({ok:false}));
-  if(!res.ok || !j.ok) throw new Error(j.error||'request_failed');
-  return j;
+  let res;
+  let payload;
+  try {
+    res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
+      body: JSON.stringify({...body, csrf: window.CSRF})
+    });
+  } catch (networkError) {
+    logError('posted:post_json_network', networkError, { url, body });
+    const err = new Error('network_error');
+    err.code = 'network_error';
+    throw err;
+  }
+
+  payload = await res.json().catch(()=>({ ok:false }));
+  if(!res.ok || !payload?.ok) {
+    const err = new Error(payload?.error || 'request_failed');
+    err.code = payload?.error || 'request_failed';
+    err.status = res.status;
+    err.payload = payload;
+    logError('posted:post_json_failed', err, { url, body, status: res.status, payload });
+    throw err;
+  }
+  return payload;
+}
+
+function statusErrorMessage(action, err){
+  if (!err || typeof err !== 'object') return `Failed to ${action}.`;
+  switch(err.code){
+    case 'illegal_transition':
+      return 'This ride status can no longer be updated in that way. It may have already been changed by the other party.';
+    case 'not_found':
+      return 'This ride could not be found. It might have been removed.';
+    case 'network_error':
+      return 'Network error. Please check your connection and try again.';
+    default:
+      return `Failed to ${action}.`;
+  }
 }
 
 function contactHtml(phone, whatsapp){
@@ -66,6 +99,7 @@ async function load(el){
     const res = await fetch(`${window.API_BASE}/ride_list.php?mine=1`, { credentials:'same-origin' });
     data = await res.json();
   } catch (e) {
+    logError('posted:fetch_failed', e);
     msg.className='alert alert-danger';
     msg.textContent='Failed to load your rides.';
     msg.classList.remove('d-none');
@@ -148,31 +182,59 @@ async function load(el){
       del.addEventListener('click', async ()=>{
         if(!confirm('Delete this ride?')) return;
         try { await postJSON(`${window.API_BASE}/ride_delete.php`, {id:item.id}); load(el); }
-        catch(e){ alert('Delete failed'); }
+        catch(e){ logError('posted:delete_failed', e, { rideId: item.id }); alert('Delete failed'); }
       });
       actions.appendChild(del);
     }
 
     if (st === 'matched'){
       addBtn('Start trip', 'btn-outline-primary', async ()=>{
-        try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'in_progress'}); load(el); }
-        catch(e){ alert('Failed to start'); }
+        try{
+          await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'in_progress'});
+          load(el);
+        }
+        catch(e){
+          logError('posted:start_failed', e, { rideId: item.id });
+          alert(statusErrorMessage('start the trip', e));
+          if (e.code === 'illegal_transition') load(el);
+        }
       });
       addBtn('Complete', 'btn-primary', async ()=>{
-        try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
-        catch(e){ alert('Failed to complete'); }
+        try{
+          await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'});
+          load(el);
+        }
+        catch(e){
+          logError('posted:complete_failed', e, { rideId: item.id });
+          alert(statusErrorMessage('complete the ride', e));
+          if (e.code === 'illegal_transition') load(el);
+        }
       });
       addBtn('Cancel', 'btn-outline-secondary', async ()=>{
         if(!confirm('Cancel this ride?')) return;
-        try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'cancelled'}); load(el); }
-        catch(e){ alert('Failed to cancel'); }
+        try{
+          await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'cancelled'});
+          load(el);
+        }
+        catch(e){
+          logError('posted:cancel_failed', e, { rideId: item.id });
+          alert(statusErrorMessage('cancel the ride', e));
+          if (e.code === 'illegal_transition') load(el);
+        }
       });
     }
 
     if (st === 'in_progress'){
       addBtn('Complete', 'btn-primary', async ()=>{
-        try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
-        catch(e){ alert('Failed to complete'); }
+        try{
+          await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'});
+          load(el);
+        }
+        catch(e){
+          logError('posted:complete_failed', e, { rideId: item.id });
+          alert(statusErrorMessage('complete the ride', e));
+          if (e.code === 'illegal_transition') load(el);
+        }
       });
     }
 
@@ -193,7 +255,7 @@ async function load(el){
                 ride_id: item.id, target_user_id: targetId, stars, role
               });
               load(el);
-            }catch(e){ alert('Rating failed'); }
+            }catch(e){ logError('posted:rating_failed', e, { rideId: item.id, targetId: item.confirmed?.match_id }); alert('Rating failed'); }
           }));
         });
         actions.appendChild(rateBtn);
