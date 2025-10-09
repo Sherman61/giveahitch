@@ -12,15 +12,14 @@ use function App\Status\from_db;
 
 start_secure_session();
 require_login();
+
 $uid  = (int) current_user()['id'];
-$role = $_GET['role'] ?? ''; // optional: 'driver' | 'passenger' | ''(both)
+$role = $_GET['role'] ?? ''; // '', 'driver', or 'passenger'
 
 try {
     $pdo = db();
 
-    // Unified shape the frontend expects: { ok:true, items:[ ... ] }
-    // One row per match where I am driver OR passenger.
-    // Provide both parties’ names + contact, plus status and ride basics.
+    // Base SELECT
     $sql = "
       SELECT
         m.id                 AS match_id,
@@ -49,37 +48,45 @@ try {
       JOIN rides r ON r.id = m.ride_id AND r.deleted = 0
       JOIN users du ON du.id = m.driver_user_id
       JOIN users pu ON pu.id = m.passenger_user_id
-      WHERE (
-        (:role = ''      AND (m.driver_user_id = :uid OR m.passenger_user_id = :uid))
-        OR (:role = 'driver'    AND m.driver_user_id = :uid)
-        OR (:role = 'passenger' AND m.passenger_user_id = :uid)
-      )
-      ORDER BY COALESCE(m.confirmed_at, m.updated_at, m.created_at) DESC
+      WHERE 1=1
     ";
 
-    $st = $pdo->prepare($sql);
-    $st->execute([
-        ':role' => $role,
-        ':uid'  => $uid,
-    ]);
+    $params = [];
 
+    // Add WHERE depending on the requested role (no placeholder reuse)
+    if ($role === 'driver') {
+        $sql .= " AND m.driver_user_id = :uid_driver";
+        $params[':uid_driver'] = $uid;
+    } elseif ($role === 'passenger') {
+        $sql .= " AND m.passenger_user_id = :uid_passenger";
+        $params[':uid_passenger'] = $uid;
+    } else {
+        // both roles
+        $sql .= " AND (m.driver_user_id = :uid_d OR m.passenger_user_id = :uid_p)";
+        $params[':uid_d'] = $uid;
+        $params[':uid_p'] = $uid;
+    }
+
+    $sql .= " ORDER BY COALESCE(m.confirmed_at, m.updated_at, m.created_at) DESC";
+
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
+    // Mark already-rated matches (ignore if table doesn’t exist)
     $ratedSet = [];
     if ($rows) {
-        $matchIds = array_unique(array_map('intval', array_column($rows, 'match_id')));
+        $matchIds = array_values(array_unique(array_map('intval', array_column($rows, 'match_id'))));
         if ($matchIds) {
-            $placeholders = implode(',', array_fill(0, count($matchIds), '?'));
-            $sqlRated = "SELECT match_id FROM ride_ratings WHERE rater_user_id=? AND match_id IN ($placeholders)";
+            $ph = implode(',', array_fill(0, count($matchIds), '?'));
+            $sqlRated = "SELECT match_id FROM ride_ratings WHERE rater_user_id = ? AND match_id IN ($ph)";
             try {
                 $ratedStmt = $pdo->prepare($sqlRated);
-                $params = array_merge([$uid], $matchIds);
-                $ratedStmt->execute($params);
+                $ratedStmt->execute(array_merge([$uid], $matchIds));
                 $ratedMatches = array_map('intval', $ratedStmt->fetchAll(PDO::FETCH_COLUMN));
-                if ($ratedMatches) {
-                    $ratedSet = array_flip($ratedMatches);
-                }
+                if ($ratedMatches) $ratedSet = array_flip($ratedMatches);
             } catch (\PDOException $e) {
+                // swallow only if table truly missing
                 if (stripos($e->getMessage(), 'ride_ratings') === false) {
                     throw $e;
                 }
@@ -87,18 +94,17 @@ try {
         }
     }
 
-    // Frontend expects `already_rated` boolean; mark true when a rating exists.
     foreach ($rows as &$row) {
-        $row['match_status'] = from_db($row['match_status']);
+        $row['match_status']  = from_db($row['match_status']);
         $row['already_rated'] = isset($ratedSet[(int)$row['match_id']]);
-        // For convenience: also expose the two “other party” fields used in driver.js layout
+        // handy aliases used by your driver UI
         $row['other_display_driver']    = $row['driver_display'];
         $row['other_display_passenger'] = $row['passenger_display'];
     }
     unset($row);
 
-    echo json_encode(['ok'=>true, 'items'=>$rows], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => true, 'items' => $rows], JSON_UNESCAPED_UNICODE);
 } catch (\Throwable $e) {
     http_response_code(500);
-    echo json_encode(['ok'=>false, 'error'=>$e->getMessage()]);
+    echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
 }

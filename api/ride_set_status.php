@@ -53,7 +53,14 @@ try {
   if (!isset($transitions[$currentStatus]) || !in_array($newStatus, $transitions[$currentStatus], true)) {
     throw new RuntimeException('illegal_transition');
   }
+  // If moving to in_progress or completed, ensure there's an active match
+  $driverId    = (int)$ride['user_id'];
+  $passengerId = 0;
+  //does this belong here?
+$pdo->prepare("UPDATE users SET score = score + 50 WHERE id IN (:d,:p)")
+    ->execute([':d'=>$driverId, ':p'=>$passengerId]);
 
+  
   $activeMatch = null;
   if (in_array($newStatus, ['in_progress','completed'], true)) {
     $statusesForSelect = ['accepted','confirmed','in_progress','completed'];

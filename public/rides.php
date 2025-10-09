@@ -220,8 +220,9 @@ $csrf = \App\Auth\csrf_token();
           <div class="col-md-2">
             <label class="form-label text-uppercase small text-secondary" for="sortOrder">Sort</label>
             <select id="sortOrder" class="form-select">
-              <option value="soonest">Soonest first</option>
-              <option value="latest">Latest first</option>
+              <option value="latest">Recent first</option>
+              <option value="soonest">Oldest first</option>
+               
             </select>
           </div>
           <div class="col-md-2 text-md-end">

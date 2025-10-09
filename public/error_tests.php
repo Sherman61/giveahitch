@@ -37,13 +37,13 @@ pre{white-space:pre-wrap; word-break:break-word;}
 <body class="pb-5">
 <nav class="navbar navbar-expand-lg bg-body-tertiary mb-3">
   <div class="container">
-    <a class="navbar-brand fw-bold" href="/glitchahitch/rides.php">Glitch a Hitch</a>
+    <a class="navbar-brand fw-bold" href="/rides.php">Glitch a Hitch</a>
     <div class="ms-auto d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="/glitchahitch/error_tests.php">Errors</a>
-      <a class="btn btn-outline-secondary btn-sm" href="/glitchahitch/my_rides.php">My rides</a>
-      <a class="btn btn-outline-secondary btn-sm" href="/glitchahitch/create.php">Create</a>
-      <a class="btn btn-outline-secondary btn-sm" href="/glitchahitch/admin.php">Admin</a>
-      <a class="btn btn-outline-danger btn-sm" href="/glitchahitch/logout.php">Logout</a>
+      <a class="btn btn-outline-secondary btn-sm" href="/error_tests.php">Errors</a>
+      <a class="btn btn-outline-secondary btn-sm" href="/my_rides.php">My rides</a>
+      <a class="btn btn-outline-secondary btn-sm" href="/create.php">Create</a>
+      <a class="btn btn-outline-secondary btn-sm" href="/admin.php">Admin</a>
+      <a class="btn btn-outline-danger btn-sm" href="/logout.php">Logout</a>
     </div>
   </div>
 </nav>
@@ -96,7 +96,7 @@ pre{white-space:pre-wrap; word-break:break-word;}
   ?>
   <div class="d-flex align-items-center mb-3">
     <h1 class="h5 mb-0">Errors — <?= h($pageSel) ?></h1>
-    <a class="btn btn-sm btn-outline-secondary ms-2" href="/glitchahitch/error_tests.php">Back</a>
+    <a class="btn btn-sm btn-outline-secondary ms-2" href="/error_tests.php">Back</a>
     <div class="ms-auto small text-muted">Total: <strong><?= $total ?></strong></div>
   </div>
 

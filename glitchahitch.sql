@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Oct 09, 2025 at 09:45 AM
+-- Generation Time: Oct 09, 2025 at 10:38 AM
 -- Server version: 8.0.43-0ubuntu0.24.04.1
 -- PHP Version: 8.3.6
 
@@ -130,7 +130,7 @@ INSERT INTO `rides` (`id`, `type`, `from_text`, `to_text`, `ride_datetime`, `rid
 (12, 'offer', 'monticello ny', 'monsey ny', '2025-08-21 05:02:00', NULL, 2, 0, '', '8454133', '', 'open', NULL, 2, '2025-08-21 09:03:13', NULL, 0, NULL, NULL, NULL, NULL),
 (13, 'offer', 'monsey', 'lakewood', '2025-10-06 09:33:00', NULL, 1, 0, '', '8454133056', '18452441202', 'cancelled', NULL, 3, '2025-10-06 01:34:03', NULL, 1, NULL, NULL, NULL, NULL),
 (14, 'request', 'monsey', 'lakewood', '2025-10-06 09:21:00', NULL, 1, 0, '', '8454133056', '', 'completed', NULL, 3, '2025-10-06 01:35:41', '2025-10-09 09:16:02', 0, NULL, NULL, NULL, NULL),
-(15, 'offer', 'monsey', 'lakewood', NULL, NULL, 1, 0, 'test', '8454133056', '', 'matched', 13, 4, '2025-10-06 06:02:31', '2025-10-09 02:29:41', 0, NULL, NULL, NULL, NULL),
+(15, 'offer', 'monsey', 'lakewood', NULL, NULL, 1, 0, 'test', '8454133056', '', 'completed', 13, 4, '2025-10-06 06:02:31', '2025-10-09 10:26:20', 0, NULL, NULL, NULL, NULL),
 (16, 'request', 'monsey', 'lakewood', '2025-10-06 03:26:00', NULL, 1, 0, '', '8454133056', '', 'open', NULL, 3, '2025-10-06 07:26:21', NULL, 0, NULL, NULL, NULL, NULL),
 (17, 'offer', 'monsey', 'lakewood nj', '2025-10-08 22:42:00', NULL, 2, 0, 'im offering a ride from ...', '8454133056', '18452441202', 'open', NULL, 4, '2025-10-09 02:43:00', '2025-10-09 02:43:00', 0, NULL, NULL, NULL, NULL),
 (18, 'offer', 'monsey', 'lakewood', NULL, NULL, 1, 0, NULL, '8454133056', NULL, 'open', NULL, 3, '2025-10-09 05:49:19', '2025-10-09 05:49:19', 0, NULL, NULL, NULL, NULL);
@@ -165,7 +165,7 @@ INSERT INTO `ride_matches` (`id`, `ride_id`, `driver_user_id`, `passenger_user_i
 (7, 4, 4, 2, 'pending', '2025-10-06 06:02:52', '2025-10-06 06:02:52', NULL),
 (8, 7, 2, 3, 'pending', '2025-10-06 07:33:01', '2025-10-09 01:47:04', NULL),
 (9, 4, 3, 2, 'pending', '2025-10-06 07:41:58', '2025-10-06 07:41:58', NULL),
-(13, 15, 4, 3, 'accepted', '2025-10-09 02:12:13', '2025-10-09 02:29:41', '2025-10-09 02:29:41'),
+(13, 15, 4, 3, 'completed', '2025-10-09 02:12:13', '2025-10-09 10:26:20', '2025-10-09 02:29:41'),
 (14, 17, 4, 2, 'pending', '2025-10-09 06:44:03', '2025-10-09 06:44:03', NULL);
 
 -- --------------------------------------------------------
@@ -177,13 +177,21 @@ INSERT INTO `ride_matches` (`id`, `ride_id`, `driver_user_id`, `passenger_user_i
 CREATE TABLE `ride_ratings` (
   `id` bigint UNSIGNED NOT NULL,
   `ride_id` bigint UNSIGNED NOT NULL,
+  `match_id` bigint UNSIGNED NOT NULL,
   `rater_user_id` bigint UNSIGNED NOT NULL,
-  `target_user_id` bigint UNSIGNED NOT NULL,
+  `rated_user_id` bigint UNSIGNED NOT NULL,
   `role` enum('driver','passenger') NOT NULL,
   `stars` tinyint UNSIGNED NOT NULL,
-  `comment` varchar(500) DEFAULT NULL,
+  `comment` varchar(1000) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+--
+-- Dumping data for table `ride_ratings`
+--
+
+INSERT INTO `ride_ratings` (`id`, `ride_id`, `match_id`, `rater_user_id`, `rated_user_id`, `role`, `stars`, `comment`, `created_at`) VALUES
+(1, 15, 13, 4, 3, 'passenger', 5, NULL, '2025-10-09 10:37:09');
 
 -- --------------------------------------------------------
 
@@ -219,8 +227,8 @@ CREATE TABLE `users` (
 INSERT INTO `users` (`id`, `email`, `password_hash`, `display_name`, `rides_offered_count`, `rides_requested_count`, `rides_given_count`, `rides_received_count`, `score`, `driver_rating_sum`, `driver_rating_count`, `passenger_rating_sum`, `passenger_rating_count`, `is_admin`, `username`, `phone`, `whatsapp`, `created_at`) VALUES
 (1, 'admin@shiyaswebsite.com', '$2y$10$eA3qk4x5v0osTTo9JQz2V.5t2s5sVZb6c8z2b3V4qUO8s2o7m4mIy', 'Site Admin', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, '2025-08-20 15:15:25'),
 (2, 'shermanshiya@gmail.com', '$2y$10$Be4xsnD8R5.DPTtFlNDBi.u81ITZ5PrQLviJfy5p4Sr0dgIN2Ntru', 'shiya s', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, '2025-08-20 18:28:43'),
-(3, 'shermanshiya+1@gmail.com', '$2y$10$kMLK94fg659GpS70vTVljeDQB7FMVlJBlRV0UHxbI6otHZX6HrIZy', 'Shiya Sherman', 1, 0, 0, 1, 100, 0, 0, 0, 0, 0, NULL, '8454133056', '8452441202', '2025-10-06 00:58:44'),
-(4, 'shermanshiya+2@gmail.com', '$2y$10$tOtEXJv/z5JqSlP.VYJBneDQU1roki2Pe02k373H.3sI6K6dEW1ES', 'dev tester', 0, 0, 1, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, '2025-10-06 04:31:37');
+(3, 'shermanshiya+1@gmail.com', '$2y$10$kMLK94fg659GpS70vTVljeDQB7FMVlJBlRV0UHxbI6otHZX6HrIZy', 'Shiya Sherman', 1, 0, 0, 2, 200, 0, 0, 5, 1, 0, NULL, '8454133056', '8452441202', '2025-10-06 00:58:44'),
+(4, 'shermanshiya+2@gmail.com', '$2y$10$tOtEXJv/z5JqSlP.VYJBneDQU1roki2Pe02k373H.3sI6K6dEW1ES', 'dev tester', 0, 0, 2, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, '2025-10-06 04:31:37');
 
 --
 -- Indexes for dumped tables
@@ -281,8 +289,12 @@ ALTER TABLE `ride_matches`
 --
 ALTER TABLE `ride_ratings`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uq_riderate` (`ride_id`,`rater_user_id`,`target_user_id`),
-  ADD KEY `idx_target` (`target_user_id`);
+  ADD UNIQUE KEY `uq_riderate` (`ride_id`,`rater_user_id`,`rated_user_id`),
+  ADD UNIQUE KEY `uq_rr_rater_per_match` (`match_id`,`rater_user_id`),
+  ADD KEY `idx_target` (`rated_user_id`),
+  ADD KEY `idx_rr_match` (`match_id`),
+  ADD KEY `idx_rr_rated` (`rated_user_id`),
+  ADD KEY `idx_rr_rater` (`rater_user_id`);
 
 --
 -- Indexes for table `users`
@@ -330,7 +342,7 @@ ALTER TABLE `ride_matches`
 -- AUTO_INCREMENT for table `ride_ratings`
 --
 ALTER TABLE `ride_ratings`
-  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `users`
@@ -364,6 +376,14 @@ ALTER TABLE `ride_matches`
   ADD CONSTRAINT `fk_rm_driver_user` FOREIGN KEY (`driver_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
   ADD CONSTRAINT `fk_rm_passenger_user` FOREIGN KEY (`passenger_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
   ADD CONSTRAINT `fk_rm_ride` FOREIGN KEY (`ride_id`) REFERENCES `rides` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `ride_ratings`
+--
+ALTER TABLE `ride_ratings`
+  ADD CONSTRAINT `fk_rr_match` FOREIGN KEY (`match_id`) REFERENCES `ride_matches` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_rr_rated` FOREIGN KEY (`rated_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
+  ADD CONSTRAINT `fk_rr_rater` FOREIGN KEY (`rater_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
