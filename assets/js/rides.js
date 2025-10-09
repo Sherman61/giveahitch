@@ -60,6 +60,21 @@ const relativeTime = (date) => {
   return rtf.format(days, 'day');
 };
 
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+
+const isExpired = (item) => {
+  const now = Date.now();
+  const rideEnd = parseDate(item?.ride_end_datetime || '');
+  if (rideEnd) {
+    return rideEnd.getTime() < now - SIX_HOURS_MS;
+  }
+  const rideStart = parseDate(item?.ride_datetime || '');
+  if (rideStart) {
+    return rideStart.getTime() < now - SIX_HOURS_MS;
+  }
+  return false;
+};
+
 const buildContactLinks = (item) => {
   const parts = [];
   if (item.phone) {
@@ -169,8 +184,8 @@ const sortItems = (items) => {
   const order = sortOrder?.value || 'soonest';
   const sorted = [...items];
   sorted.sort((a, b) => {
-    const dateA = parseDate(a.ride_datetime || a.created_at);
-    const dateB = parseDate(b.ride_datetime || b.created_at);
+    const dateA = parseDate(a.ride_datetime || a.ride_end_datetime || a.created_at);
+    const dateB = parseDate(b.ride_datetime || b.ride_end_datetime || b.created_at);
     const tsA = dateA ? dateA.getTime() : Infinity;
     const tsB = dateB ? dateB.getTime() : Infinity;
     return order === 'latest' ? tsB - tsA : tsA - tsB;
@@ -190,9 +205,22 @@ const render = (items) => {
 
   items.forEach((item) => {
     const cls = item.type === 'request' ? 'request' : 'offer';
-    const rideDate = parseDate(item.ride_datetime || '');
+    const rideStart = parseDate(item.ride_datetime || '');
+    const rideEnd = parseDate(item.ride_end_datetime || '');
     const createdAt = parseDate(item.created_at || '');
-    const scheduleLabel = item.ride_datetime ? formatDateTime(rideDate) : 'Flexible timing';
+    const startLabel = rideStart ? escapeHtml(formatDateTime(rideStart, { fallback: '' })) : '';
+    const endLabel = rideEnd ? escapeHtml(formatDateTime(rideEnd, { fallback: '' })) : '';
+    const scheduleSegments = [];
+    if (rideStart) {
+      scheduleSegments.push(`<span><i class="bi bi-calendar-event me-1"></i>Starts ${startLabel}</span>`);
+    }
+    if (rideEnd) {
+      scheduleSegments.push(`<span><i class="bi bi-flag me-1"></i>Ends ${endLabel}</span>`);
+    }
+    if (!scheduleSegments.length) {
+      scheduleSegments.push('<span><i class="bi bi-calendar-event me-1"></i>Flexible timing</span>');
+    }
+    const scheduleHtml = scheduleSegments.join('');
     const seatsLabel = (item.package_only || item.seats === 0)
       ? 'Package only'
       : `${item.seats} seat${item.seats === 1 ? '' : 's'}`;
@@ -215,7 +243,7 @@ const render = (items) => {
             </div>
             <div class="fw-semibold fs-5 text-primary mb-2">${escapeHtml(item.from_text)} <span class="text-body-secondary">→</span> ${escapeHtml(item.to_text)}</div>
             <div class="ride-meta d-flex flex-wrap text-secondary small">
-              <span><i class="bi bi-calendar-event me-1"></i>${scheduleLabel}</span>
+              ${scheduleHtml}
               <span><i class="bi bi-people me-1"></i>${seatsLabel}</span>
               ${createdAt ? `<span><i class="bi bi-clock-history me-1"></i>Posted ${relativeTime(createdAt) || createdAt.toLocaleDateString()}</span>` : ''}
             </div>
@@ -283,7 +311,7 @@ const fetchRides = async ({ showLoading = true, reason = 'manual' } = {}) => {
     if (!res.ok || !data.ok) {
       throw new Error(data.error || 'Failed to load rides');
     }
-    rawItems = Array.isArray(data.items) ? data.items : [];
+    rawItems = Array.isArray(data.items) ? data.items.filter((item) => !isExpired(item)) : [];
     render(sortItems(rawItems));
     updateSummary(rawItems);
     hideError();

@@ -53,10 +53,15 @@ $csrf = \App\Auth\csrf_token();
                 </select>
                 <div class="invalid-feedback">Select a type.</div>
               </div>
-              <div class="col-md-8">
-                <label class="form-label">Date & Time (optional)</label>
+              <div class="col-md-4">
+                <label class="form-label">Start date &amp; time (optional)</label>
                 <input type="datetime-local" class="form-control" name="ride_datetime">
                 <div class="form-text">Leave empty if flexible.</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">End date &amp; time (optional)</label>
+                <input type="datetime-local" class="form-control" name="ride_end_datetime">
+                <div class="form-text">Used to auto-hide the ride after it ends.</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">From</label>
@@ -117,6 +122,8 @@ const savedContactHint = document.getElementById('savedContactHint');
 const fillBtn = document.getElementById('fillFromProfile');
 const phoneInput = form.elements['phone'];
 const whatsappInput = form.elements['whatsapp'];
+const startInput = form.elements['ride_datetime'];
+const endInput = form.elements['ride_end_datetime'];
 let savedContact = null;
 
 async function loadSavedContact(){
@@ -150,17 +157,45 @@ function hasContact(f){
   return (f.phone.value.trim() !== '' || f.whatsapp.value.trim() !== '');
 }
 
+function validateDateOrder(){
+  if (!startInput || !endInput) return true;
+  endInput.setCustomValidity('');
+  const startVal = startInput.value.trim();
+  const endVal = endInput.value.trim();
+  if (!startVal || !endVal) return true;
+  const startDate = new Date(startVal);
+  const endDate = new Date(endVal);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return true;
+  }
+  if (endDate <= startDate) {
+    endInput.setCustomValidity('End time must be after the start time.');
+    return false;
+  }
+  return true;
+}
+
+startInput?.addEventListener('change', validateDateOrder);
+endInput?.addEventListener('change', () => {
+  const ok = validateDateOrder();
+  if (!ok) endInput.reportValidity();
+});
+
 form.addEventListener('submit', async (e)=>{
   e.preventDefault();
   alertBox.className=''; alertBox.textContent='';
 
   // Built-in + custom contact requirement
-  if (!form.checkValidity() || !hasContact(form)) {
+  const datesOk = validateDateOrder();
+  if (!form.checkValidity() || !hasContact(form) || !datesOk) {
     e.stopPropagation();
     form.classList.add('was-validated');
     if (!hasContact(form)) {
       alertBox.className='alert alert-warning';
       alertBox.textContent='Please provide at least one contact method (Phone or WhatsApp).';
+    } else if (!datesOk) {
+      alertBox.className='alert alert-warning';
+      alertBox.textContent='The end date & time must be after the start date & time.';
     }
     return;
   }
