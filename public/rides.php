@@ -18,6 +18,7 @@ $csrf = \App\Auth\csrf_token();
   <script>
     window.ME_USER_ID = <?= $me ? (int) $me['id'] : 'null' ?>;
     window.CSRF_TOKEN = <?= json_encode($csrf, JSON_UNESCAPED_SLASHES) ?>;
+    window.API_BASE   = '/api';
   </script>
   <style>
     body {
@@ -262,9 +263,6 @@ $csrf = \App\Auth\csrf_token();
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
-  <script>
-    const API_BASE = '/api';
-  </script>
   <script src="/assets/js/rides.js" type="module"></script>
 </body>
 </html>

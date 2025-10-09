@@ -6,10 +6,27 @@ const esc = s => s ? String(s).replace(/[&<>"']/g, m => (
 )) : '';
 
 const badge = status => {
-  const map = {open:'secondary',pending:'warning',matched:'primary',in_progress:'info',completed:'success',cancelled:'dark',rejected:'dark'};
+  const map = {open:'secondary',pending:'warning',matched:'primary',confirmed:'primary',in_progress:'info',completed:'success',cancelled:'dark',rejected:'dark'};
   const cls = map[status] || 'light';
   return `<span class="badge badge-status text-bg-${cls}">${esc(status||'open')}</span>`;
 };
+
+function friendlyStatusError(err){
+  const code = err?.message || '';
+  if (code === 'illegal_transition') {
+    return 'This ride was updated in another tab or by the other rider. Refresh to see the latest status.';
+  }
+  if (code === 'no_active_match') {
+    return 'The ride no longer has an active match, so this action cannot be performed.';
+  }
+  return '';
+}
+
+function handleActionError(tag, err, fallback, context){
+  const message = friendlyStatusError(err) || fallback;
+  logError(tag, err, context);
+  alert(message);
+}
 
 // small helpers
 async function postJSON(url, body){
@@ -160,26 +177,26 @@ async function load(el){
       actions.appendChild(del);
     }
 
-    if (st === 'matched'){
+    if (st === 'matched' && item.confirmed){
       addBtn('Start trip', 'btn-outline-primary', async ()=>{
         try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'in_progress'}); load(el); }
-        catch(e){ logError('posted:start_failed', e, { rideId: item.id }); alert('Failed to start'); }
+        catch(e){ handleActionError('posted:start_failed', e, 'Failed to start this ride.', { rideId: item.id }); }
       });
       addBtn('Complete', 'btn-primary', async ()=>{
         try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
-        catch(e){ logError('posted:complete_failed', e, { rideId: item.id }); alert('Failed to complete'); }
+        catch(e){ handleActionError('posted:complete_failed', e, 'Failed to mark the ride complete.', { rideId: item.id }); }
       });
       addBtn('Cancel', 'btn-outline-secondary', async ()=>{
         if(!confirm('Cancel this ride?')) return;
         try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'cancelled'}); load(el); }
-        catch(e){ logError('posted:cancel_failed', e, { rideId: item.id }); alert('Failed to cancel'); }
+        catch(e){ handleActionError('posted:cancel_failed', e, 'Failed to cancel this ride.', { rideId: item.id }); }
       });
     }
 
-    if (st === 'in_progress'){
+    if (st === 'in_progress' && item.confirmed){
       addBtn('Complete', 'btn-primary', async ()=>{
         try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
-        catch(e){ logError('posted:complete_failed', e, { rideId: item.id }); alert('Failed to complete'); }
+        catch(e){ handleActionError('posted:complete_failed', e, 'Failed to mark the ride complete.', { rideId: item.id }); }
       });
     }
 

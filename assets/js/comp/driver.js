@@ -6,10 +6,27 @@ const esc = s => s ? String(s).replace(/[&<>"']/g, m => (
 )) : '';
 
 const badge = status => {
-  const map = {pending:'warning',accepted:'primary',matched:'primary',in_progress:'info',completed:'success',rejected:'dark',cancelled:'dark'};
+  const map = {pending:'warning',accepted:'primary',matched:'primary',confirmed:'primary',in_progress:'info',completed:'success',rejected:'dark',cancelled:'dark'};
   const cls = map[status] || 'light';
   return `<span class="badge text-bg-${cls}">${esc(status || 'pending')}</span>`;
 };
+
+function friendlyStatusError(err){
+  const code = err?.message || '';
+  if (code === 'illegal_transition') {
+    return 'This ride was updated somewhere else. Refresh to get the latest status before trying again.';
+  }
+  if (code === 'no_active_match') {
+    return 'This match is no longer active, so the action could not be completed.';
+  }
+  return '';
+}
+
+function handleActionError(tag, err, fallback, context){
+  const message = friendlyStatusError(err) || fallback;
+  logError(tag, err, context);
+  alert(message);
+}
 
 const contactHtml = (phone, whatsapp) => {
   const parts = [];
@@ -100,13 +117,13 @@ function cardForResponded(m){
   }
 
   // Accepted / matched / in_progress → you can mark complete too (both parties can do it)
-  if (['accepted','matched','in_progress'].includes(m.match_status)){
+  if (['accepted','matched','confirmed','in_progress'].includes(m.match_status)){
     const c = document.createElement('button');
     c.className='btn btn-sm btn-primary';
     c.textContent='Complete';
     c.addEventListener('click', async ()=>{
       try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, { ride_id: m.ride_id, status:'completed' }); location.reload(); }
-      catch(e){ logError('driver:complete_failed', e, { rideId: m.ride_id }); alert('Complete failed'); }
+      catch(e){ handleActionError('driver:complete_failed', e, 'Failed to mark the ride complete.', { rideId: m.ride_id }); }
     });
     actions.appendChild(c);
   }

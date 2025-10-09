@@ -88,7 +88,7 @@ try {
       JOIN users du ON du.id = m.driver_user_id
       JOIN users pu ON pu.id = m.passenger_user_id
       WHERE m.ride_id = :rid
-        AND m.status IN ('accepted','in_progress','completed')
+        AND m.status IN ('accepted','confirmed','in_progress','completed')
       ORDER BY COALESCE(m.confirmed_at, m.updated_at, m.created_at) DESC
       LIMIT 1";
     $mStmt = $pdo->prepare($matchSql);
