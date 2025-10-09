@@ -63,14 +63,36 @@ try {
 
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-    // Frontend expects `already_rated` boolean. If you don’t have a ratings table yet,
-    // return false for now. You can wire this to ride_ratings later.
+    $ratedSet = [];
+    if ($rows) {
+        $matchIds = array_unique(array_map('intval', array_column($rows, 'match_id')));
+        if ($matchIds) {
+            $placeholders = implode(',', array_fill(0, count($matchIds), '?'));
+            $sqlRated = "SELECT match_id FROM ride_ratings WHERE rater_user_id=? AND match_id IN ($placeholders)";
+            try {
+                $ratedStmt = $pdo->prepare($sqlRated);
+                $params = array_merge([$uid], $matchIds);
+                $ratedStmt->execute($params);
+                $ratedMatches = array_map('intval', $ratedStmt->fetchAll(PDO::FETCH_COLUMN));
+                if ($ratedMatches) {
+                    $ratedSet = array_flip($ratedMatches);
+                }
+            } catch (\PDOException $e) {
+                if (stripos($e->getMessage(), 'ride_ratings') === false) {
+                    throw $e;
+                }
+            }
+        }
+    }
+
+    // Frontend expects `already_rated` boolean; mark true when a rating exists.
     foreach ($rows as &$row) {
-        $row['already_rated'] = false;
+        $row['already_rated'] = isset($ratedSet[(int)$row['match_id']]);
         // For convenience: also expose the two “other party” fields used in driver.js layout
         $row['other_display_driver']    = $row['driver_display'];
         $row['other_display_passenger'] = $row['passenger_display'];
     }
+    unset($row);
 
     echo json_encode(['ok'=>true, 'items'=>$rows], JSON_UNESCAPED_UNICODE);
 } catch (\Throwable $e) {
