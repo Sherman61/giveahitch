@@ -73,12 +73,32 @@ function contactRows(contact){
   return rows.length ? rows.join('') : '<div class="text-secondary">No contact information shared yet.</div>';
 }
 
+function starDisplay(avg){
+  if(avg == null || Number.isNaN(Number(avg))){
+    return '<div class="fs-4 fw-semibold">—</div>';
+  }
+  const value = Number(avg);
+  const rounded = Math.round(value * 2) / 2;
+  const full = Math.floor(rounded);
+  const half = (rounded - full) >= 0.5 ? 1 : 0;
+  const empty = Math.max(0, 5 - full - half);
+  const icons = [];
+  for(let i=0;i<full;i++) icons.push('<i class="bi bi-star-fill"></i>');
+  if(half) icons.push('<i class="bi bi-star-half"></i>');
+  for(let i=0;i<empty;i++) icons.push('<i class="bi bi-star"></i>');
+  return `<div class="d-flex align-items-center gap-2">`+
+         `<span class="text-warning fs-5">${icons.join('')}</span>`+
+         `<span class="fs-4 fw-semibold">${value.toFixed(1)}</span>`+
+         `<span class="text-secondary">/5</span>`+
+         `</div>`;
+}
+
 function ratingBlock(label, rating){
   if((rating?.count ?? 0) > 0){
-    const avg = rating.average != null ? Number(rating.average).toFixed(1) : '—';
+    const avg = rating.average != null ? Number(rating.average) : null;
     return `<div class="border rounded-3 p-3 h-100">
       <div class="text-secondary small text-uppercase">${label}</div>
-      <div class="fs-4 fw-semibold">${avg}</div>
+      <div class="mt-1">${starDisplay(avg)}</div>
       <div class="text-secondary small">${rating.count} rating${rating.count === 1 ? '' : 's'}</div>
     </div>`;
   }

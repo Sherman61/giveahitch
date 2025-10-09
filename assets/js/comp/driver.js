@@ -136,9 +136,7 @@ function cardForResponded(m){
     r.addEventListener('click', ()=>{
       r.replaceWith(ratingStarRow(async (stars)=>{
         try{
-          const target = amDriver ? m.passenger_user_id : m.driver_user_id;
-          const role   = amDriver ? 'passenger' : 'driver';
-          await postJSON(`${window.API_BASE}/rate_submit.php`, { ride_id: m.ride_id, target_user_id: target, stars, role });
+          await postJSON(`${window.API_BASE}/rate_submit.php`, { match_id: m.match_id, stars });
           location.reload();
         }catch(e){ logError('driver:rating_failed', e, { rideId: m.ride_id, matchId: m.match_id }); alert('Rating failed'); }
       }));
@@ -151,16 +149,29 @@ function cardForResponded(m){
 
 async function render(el){
   el.innerHTML = `
-    <h1 class="h4 mb-3">I responded</h1>
-    <h2 class="h6 text-success d-flex align-items-center gap-2">Accepted / In progress</h2>
-    <div id="acceptedList" class="vstack gap-3 mb-4"></div>
-    <h2 class="h6 text-warning d-flex align-items-center gap-2">Pending</h2>
-    <div id="pendingList" class="vstack gap-3"></div>
+    <h1 class="h4 mb-2">I responded</h1>
+    <p class="text-secondary small mb-4">These are rides where you joined as a driver or passenger. Track your active trips, follow up on pending matches, and rate your partner once a ride is completed.</p>
+    <section class="mb-4">
+      <h2 class="h6 text-success d-flex align-items-center gap-2">Active trips</h2>
+      <p class="text-secondary small mb-2">Use these actions to coordinate with your match and wrap up the ride when it ends.</p>
+      <div id="acceptedList" class="vstack gap-3"></div>
+    </section>
+    <section class="mb-4">
+      <h2 class="h6 text-warning d-flex align-items-center gap-2">Pending responses</h2>
+      <p class="text-secondary small mb-2">Waiting on the ride owner? You can withdraw here if your plans changed.</p>
+      <div id="pendingList" class="vstack gap-3"></div>
+    </section>
+    <section class="mb-4">
+      <h2 class="h6 text-primary d-flex align-items-center gap-2">Completed (rate your partner)</h2>
+      <p class="text-secondary small mb-2">Rate the other rider to keep the community trustworthy.</p>
+      <div id="completedList" class="vstack gap-3"></div>
+    </section>
     <div id="msg" class="d-none alert mt-3"></div>
   `;
 
   const accWrap = el.querySelector('#acceptedList');
   const penWrap = el.querySelector('#pendingList');
+  const compWrap = el.querySelector('#completedList');
   const msg     = el.querySelector('#msg');
 
   let data;
@@ -177,19 +188,30 @@ async function render(el){
     data = await res.json();
   } catch (e) {
     logError('driver:fetch_failed', e);
-    msg.className='alert alert-danger'; msg.textContent='Failed to load your responded rides.'; msg.classList.remove('d-none'); return;
+    msg.className = 'alert alert-danger';
+    msg.textContent = 'Failed to load your responded rides.';
+    msg.classList.remove('d-none');
+    return;
   }
-  if (!data?.ok || !Array.isArray(data.items)){ msg.className='alert alert-danger'; msg.textContent='Bad data.'; msg.classList.remove('d-none'); return; }
+  if (!data?.ok || !Array.isArray(data.items)) {
+    msg.className = 'alert alert-danger';
+    msg.textContent = 'Bad data.';
+    msg.classList.remove('d-none');
+    return;
+  }
 
-  // split into pending vs active/accepted/etc.
-  const pending  = data.items.filter(m => m.match_status === 'pending');
-  const accepted = data.items.filter(m => m.match_status !== 'pending');
+  const pending   = data.items.filter(m => m.match_status === 'pending');
+  const active    = data.items.filter(m => ['accepted','matched','confirmed','in_progress'].includes(m.match_status));
+  const completed = data.items.filter(m => m.match_status === 'completed');
 
-  if (!accepted.length) accWrap.innerHTML = `<div class="alert alert-info">No accepted rides yet.</div>`;
-  else { accWrap.innerHTML=''; accepted.forEach(m => accWrap.appendChild(cardForResponded(m))); }
+  if (!active.length) accWrap.innerHTML = `<div class="alert alert-info">No active trips right now.</div>`;
+  else { accWrap.innerHTML=''; active.forEach(m => accWrap.appendChild(cardForResponded(m))); }
 
-  if (!pending.length)  penWrap.innerHTML = `<div class="alert alert-info">No pending requests yet.</div>`;
+  if (!pending.length)  penWrap.innerHTML = `<div class="alert alert-info">No pending matches.</div>`;
   else { penWrap.innerHTML='';  pending.forEach(m  => penWrap.appendChild(cardForResponded(m))); }
+
+  if (!completed.length) compWrap.innerHTML = `<div class="alert alert-secondary">No completed rides yet.</div>`;
+  else { compWrap.innerHTML=''; completed.forEach(m => compWrap.appendChild(cardForResponded(m))); }
 }
 
 export function mountDriver(el){
