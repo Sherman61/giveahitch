@@ -27,7 +27,7 @@ $me  = current_user();
 $stmt = $pdo->prepare("SELECT id, driver_user_id, passenger_user_id, status FROM ride_matches WHERE ride_id=:rid");
 $stmt->execute([':rid'=>$rideId]);
 $m = $stmt->fetch(PDO::FETCH_ASSOC);
-if(!$m || $m['status']!=='completed'){ http_response_code(409); echo json_encode(['ok'=>false,'error':'not_completed']); exit; }
+if(!$m || $m['status']!=='completed'){ http_response_code(409); echo json_encode(['ok'=>false,'error'=>'not_completed']); exit; }
 
 // rater must be one of the parties, ratee is the other party by role
 if ($role === 'driver') {
@@ -36,9 +36,9 @@ if ($role === 'driver') {
   $ratee = (int)$m['passenger_user_id'];
 }
 if ((int)$me['id'] !== (int)$m['driver_user_id'] && (int)$me['id'] !== (int)$m['passenger_user_id']) {
-  http_response_code(403); echo json_encode(['ok'=>false,'error':'forbidden']); exit;
+  http_response_code(403); echo json_encode(['ok'=>false,'error'=>'forbidden']); exit;
 }
-if ((int)$me['id'] === $ratee) { http_response_code(403); echo json_encode(['ok'=>false,'error':'self_rate']); exit; }
+if ((int)$me['id'] === $ratee) { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'self_rate']); exit; }
 
 $pdo->beginTransaction();
 $pdo->prepare("INSERT INTO feedback (ride_match_id,rater_user_id,ratee_user_id,role,rating,comment)
