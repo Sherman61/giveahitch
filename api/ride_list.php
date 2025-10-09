@@ -21,6 +21,7 @@ try {
     $all     = isset($_GET['all'])  ? 1 : 0;
 
     $user    = \App\Auth\current_user();
+    $myId    = $user ? (int)$user['id'] : 0;
     $isAdmin = $user && !empty($user['is_admin']);
 
     $sql = "SELECT
@@ -91,6 +92,7 @@ try {
       ORDER BY COALESCE(m.confirmed_at, m.updated_at, m.created_at) DESC
       LIMIT 1";
     $mStmt = $pdo->prepare($matchSql);
+    $ratingMatchIds = [];
 
     foreach ($rows as $r) {
       $confirmed = null;
@@ -108,11 +110,42 @@ try {
           'passenger_phone'    => $m['passenger_phone'],
           'passenger_whatsapp' => $m['passenger_whatsapp'],
         ];
+        if ($myId && ($confirmed['driver_user_id'] === $myId || $confirmed['passenger_user_id'] === $myId)) {
+          $ratingMatchIds[$confirmed['match_id']] = true;
+        }
       }
 
       $r['confirmed']      = $confirmed;
-      $r['already_rated']  = false; // TODO: set true if you find a rating by current user for this ride
+      $r['already_rated']  = false; // default; updated below if the current user has rated this match
       $out[] = $r;
+    }
+
+    if ($myId && $ratingMatchIds) {
+      $matchIds = array_map('intval', array_keys($ratingMatchIds));
+      $placeholders = implode(',', array_fill(0, count($matchIds), '?'));
+      $sqlRated = "SELECT match_id FROM ride_ratings WHERE rater_user_id=? AND match_id IN ($placeholders)";
+      try {
+        $ratedStmt = $pdo->prepare($sqlRated);
+        $params = array_merge([$myId], $matchIds);
+        $ratedStmt->execute($params);
+        $rated = array_map('intval', $ratedStmt->fetchAll(PDO::FETCH_COLUMN));
+        if ($rated) {
+          $ratedSet = array_flip($rated);
+          foreach ($out as &$item) {
+            if (!empty($item['confirmed'])) {
+              $mid = (int)$item['confirmed']['match_id'];
+              if (isset($ratedSet[$mid])) {
+                $item['already_rated'] = true;
+              }
+            }
+          }
+          unset($item);
+        }
+      } catch (\PDOException $e) {
+        if (stripos($e->getMessage(), 'ride_ratings') === false) {
+          throw $e;
+        }
+      }
     }
 
     echo json_encode(['ok'=>true, 'items'=>$out], JSON_UNESCAPED_UNICODE);
