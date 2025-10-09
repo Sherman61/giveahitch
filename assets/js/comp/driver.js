@@ -1,3 +1,5 @@
+import { logError } from '../utils/logger.js';
+
 // /assets/js/components/driver.js
 const esc = s => s ? String(s).replace(/[&<>"']/g, m => (
   {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]
@@ -27,7 +29,11 @@ async function postJSON(url, body){
     body: JSON.stringify({...body, csrf: window.CSRF})
   });
   const j = await res.json().catch(()=>({ok:false}));
-  if(!res.ok || !j.ok) throw new Error(j.error||'request_failed');
+  if(!res.ok || !j.ok) {
+    const err = new Error(j.error||'request_failed');
+    logError('driver:post_json_failed', err, { url, body });
+    throw err;
+  }
   return j;
 }
 
@@ -88,7 +94,7 @@ function cardForResponded(m){
     w.textContent='Withdraw';
     w.addEventListener('click', async ()=>{
       try{ await postJSON(`${window.API_BASE}/match_withdraw.php`, { match_id: m.match_id }); card.remove(); }
-      catch(e){ alert('Withdraw failed'); }
+      catch(e){ logError('driver:withdraw_failed', e, { matchId: m.match_id }); alert('Withdraw failed'); }
     });
     actions.appendChild(w);
   }
@@ -100,7 +106,7 @@ function cardForResponded(m){
     c.textContent='Complete';
     c.addEventListener('click', async ()=>{
       try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, { ride_id: m.ride_id, status:'completed' }); location.reload(); }
-      catch(e){ alert('Complete failed'); }
+      catch(e){ logError('driver:complete_failed', e, { rideId: m.ride_id }); alert('Complete failed'); }
     });
     actions.appendChild(c);
   }
@@ -117,7 +123,7 @@ function cardForResponded(m){
           const role   = amDriver ? 'passenger' : 'driver';
           await postJSON(`${window.API_BASE}/rate_submit.php`, { ride_id: m.ride_id, target_user_id: target, stars, role });
           location.reload();
-        }catch(e){ alert('Rating failed'); }
+        }catch(e){ logError('driver:rating_failed', e, { rideId: m.ride_id, matchId: m.match_id }); alert('Rating failed'); }
       }));
     });
     actions.appendChild(r);
@@ -153,6 +159,7 @@ async function render(el){
     const res = await fetch(`${window.API_BASE}/my_matches.php`, { credentials:'same-origin' });
     data = await res.json();
   } catch (e) {
+    logError('driver:fetch_failed', e);
     msg.className='alert alert-danger'; msg.textContent='Failed to load your responded rides.'; msg.classList.remove('d-none'); return;
   }
   if (!data?.ok || !Array.isArray(data.items)){ msg.className='alert alert-danger'; msg.textContent='Bad data.'; msg.classList.remove('d-none'); return; }

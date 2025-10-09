@@ -1,3 +1,5 @@
+import { logError } from '../utils/logger.js';
+
 // /assets/js/components/posted.js
 const esc = s => s ? String(s).replace(/[&<>"']/g, m => (
   {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]
@@ -18,7 +20,11 @@ async function postJSON(url, body){
     body: JSON.stringify({...body, csrf: window.CSRF})
   });
   const j = await res.json().catch(()=>({ok:false}));
-  if(!res.ok || !j.ok) throw new Error(j.error||'request_failed');
+  if(!res.ok || !j.ok) {
+    const err = new Error(j.error||'request_failed');
+    logError('posted:post_json_failed', err, { url, body });
+    throw err;
+  }
   return j;
 }
 
@@ -66,6 +72,7 @@ async function load(el){
     const res = await fetch(`${window.API_BASE}/ride_list.php?mine=1`, { credentials:'same-origin' });
     data = await res.json();
   } catch (e) {
+    logError('posted:fetch_failed', e);
     msg.className='alert alert-danger';
     msg.textContent='Failed to load your rides.';
     msg.classList.remove('d-none');
@@ -148,7 +155,7 @@ async function load(el){
       del.addEventListener('click', async ()=>{
         if(!confirm('Delete this ride?')) return;
         try { await postJSON(`${window.API_BASE}/ride_delete.php`, {id:item.id}); load(el); }
-        catch(e){ alert('Delete failed'); }
+        catch(e){ logError('posted:delete_failed', e, { rideId: item.id }); alert('Delete failed'); }
       });
       actions.appendChild(del);
     }
@@ -156,23 +163,23 @@ async function load(el){
     if (st === 'matched'){
       addBtn('Start trip', 'btn-outline-primary', async ()=>{
         try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'in_progress'}); load(el); }
-        catch(e){ alert('Failed to start'); }
+        catch(e){ logError('posted:start_failed', e, { rideId: item.id }); alert('Failed to start'); }
       });
       addBtn('Complete', 'btn-primary', async ()=>{
         try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
-        catch(e){ alert('Failed to complete'); }
+        catch(e){ logError('posted:complete_failed', e, { rideId: item.id }); alert('Failed to complete'); }
       });
       addBtn('Cancel', 'btn-outline-secondary', async ()=>{
         if(!confirm('Cancel this ride?')) return;
         try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'cancelled'}); load(el); }
-        catch(e){ alert('Failed to cancel'); }
+        catch(e){ logError('posted:cancel_failed', e, { rideId: item.id }); alert('Failed to cancel'); }
       });
     }
 
     if (st === 'in_progress'){
       addBtn('Complete', 'btn-primary', async ()=>{
         try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
-        catch(e){ alert('Failed to complete'); }
+        catch(e){ logError('posted:complete_failed', e, { rideId: item.id }); alert('Failed to complete'); }
       });
     }
 
@@ -193,7 +200,7 @@ async function load(el){
                 ride_id: item.id, target_user_id: targetId, stars, role
               });
               load(el);
-            }catch(e){ alert('Rating failed'); }
+            }catch(e){ logError('posted:rating_failed', e, { rideId: item.id, targetId: item.confirmed?.match_id }); alert('Rating failed'); }
           }));
         });
         actions.appendChild(rateBtn);
