@@ -1,14 +1,15 @@
-<!-- this is if a driver wants to remove there offer -->
-
 <?php
 declare(strict_types=1);
-header('Content-Type: application/json; charset=utf-8');
+
+use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Status\{from_db, to_db};
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/status.php';
 
-use function App\Auth\{require_login, current_user, csrf_verify};
+header('Content-Type: application/json; charset=utf-8');
 
 start_secure_session();
 require_login();
@@ -29,6 +30,7 @@ $rq = $pdo->prepare("SELECT id,user_id,type,status FROM rides WHERE id=:id AND d
 $rq->execute([':id'=>$rideId]);
 $ride = $rq->fetch(PDO::FETCH_ASSOC);
 if (!$ride) { $pdo->rollBack(); http_response_code(404); echo json_encode(['ok'=>false,'error'=>'not_found']); exit; }
+$ride['status'] = from_db($ride['status'] ?? 'open');
 
 /* only owner can confirm; owner is always rides.user_id */
 $me = current_user();
@@ -43,16 +45,22 @@ if ($ride['status'] !== 'open') {
 $mq = $pdo->prepare("SELECT id,status FROM ride_matches WHERE id=:mid AND ride_id=:rid FOR UPDATE");
 $mq->execute([':mid'=>$matchId, ':rid'=>$rideId]);
 $match = $mq->fetch(PDO::FETCH_ASSOC);
+if ($match) {
+  $match['status'] = from_db($match['status']);
+}
 if (!$match || $match['status'] !== 'pending') {
   $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'not_pending']); exit;
 }
 
 /* accept chosen + reject the rest */
-$pdo->prepare("UPDATE ride_matches SET status='accepted', confirmed_at=NOW() WHERE id=:mid")->execute([':mid'=>$matchId]);
-$pdo->prepare("UPDATE ride_matches SET status='rejected' WHERE ride_id=:rid AND status='pending' AND id<>:mid")->execute([':rid'=>$rideId, ':mid'=>$matchId]);
+$pdo->prepare("UPDATE ride_matches SET status=:status, confirmed_at=NOW() WHERE id=:mid")
+    ->execute([':status'=>to_db('accepted'), ':mid'=>$matchId]);
+$pdo->prepare("UPDATE ride_matches SET status=:status WHERE ride_id=:rid AND status=:pending AND id<>:mid")
+    ->execute([':status'=>to_db('rejected'), ':pending'=>to_db('pending'), ':rid'=>$rideId, ':mid'=>$matchId]);
 
 /* mark ride matched */
-$pdo->prepare("UPDATE rides SET status='matched' WHERE id=:rid")->execute([':rid'=>$rideId]);
+$pdo->prepare("UPDATE rides SET status=:status WHERE id=:rid")
+    ->execute([':status'=>to_db('matched'), ':rid'=>$rideId]);
 
 $pdo->commit();
 echo json_encode(['ok'=>true,'status'=>'accepted','match_id'=>$matchId]);

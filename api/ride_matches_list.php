@@ -5,8 +5,10 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/status.php';
 
 use function App\Auth\{require_login, current_user};
+use function App\Status\{from_db, to_db};
 
 start_secure_session();
 require_login();
@@ -48,6 +50,7 @@ if ((int)$ride['user_id'] !== $uid) {
  *    - If the ride is an OFFER, then requesters are PASSENGERS (passenger_user_id).
  *    - If the ride is a REQUEST (looking), then requesters are DRIVERS (driver_user_id).
  */
+$ride['status'] = from_db($ride['status'] ?? 'open');
 $whoCol = ($ride['type'] === 'offer') ? 'passenger_user_id' : 'driver_user_id';
 
 /**
@@ -94,13 +97,21 @@ SELECT
 FROM ride_matches m
 JOIN users u ON u.id = m.$otherCol
 WHERE m.ride_id = :rid
-  AND m.status IN ('accepted','confirmed','in_progress','completed')
-ORDER BY FIELD(m.status,'confirmed','accepted','in_progress','completed'), m.created_at DESC
+  AND m.status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','confirmed','in_progress','completed'])) . ")
+ORDER BY FIELD(m.status," . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['confirmed','accepted','in_progress','completed'])) . "), m.created_at DESC
 LIMIT 1
 ";
 $confStmt = $pdo->prepare($confirmedSql);
 $confStmt->execute([':rid' => $rideId]);
 $confirmed = $confStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+if ($confirmed) {
+    $confirmed['status'] = from_db($confirmed['status']);
+}
+
+foreach ($pending as &$row) {
+    $row['status'] = from_db($row['status']);
+}
+unset($row);
 
 /** 5) Respond */
 echo json_encode([

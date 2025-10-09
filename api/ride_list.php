@@ -8,6 +8,9 @@ ini_set('display_errors','1');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/status.php';
+
+use function App\Status\{from_db, to_db};
 
 start_secure_session();
 
@@ -39,11 +42,11 @@ try {
     if (!$mine) {
         if (!$all || !$isAdmin) {
             $sql .= " AND r.status = :status";
-            $params[':status'] = 'open';
+            $params[':status'] = to_db('open');
         } else {
             if (isset($_GET['status']) && $_GET['status'] !== '') {
                 $sql .= " AND r.status = :status";
-                $params[':status'] = $_GET['status'];
+                $params[':status'] = to_db((string)$_GET['status']);
             }
         }
     }
@@ -88,7 +91,7 @@ try {
       JOIN users du ON du.id = m.driver_user_id
       JOIN users pu ON pu.id = m.passenger_user_id
       WHERE m.ride_id = :rid
-        AND m.status IN ('accepted','confirmed','in_progress','completed')
+        AND m.status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','confirmed','in_progress','completed'])) . ")
       ORDER BY COALESCE(m.confirmed_at, m.updated_at, m.created_at) DESC
       LIMIT 1";
     $mStmt = $pdo->prepare($matchSql);
@@ -115,6 +118,10 @@ try {
         }
       }
 
+      $r['status']         = from_db($r['status'] ?? 'open');
+      if ($confirmed) {
+        $confirmed['status'] = from_db($confirmed['status']);
+      }
       $r['confirmed']      = $confirmed;
       $r['already_rated']  = false; // default; updated below if the current user has rated this match
       $out[] = $r;

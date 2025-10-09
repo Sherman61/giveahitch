@@ -5,8 +5,10 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/status.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Status\{from_db, to_db};
 
 start_secure_session();
 require_login();
@@ -36,13 +38,14 @@ try {
   $m = $q->fetch(PDO::FETCH_ASSOC);
 
   if (!$m) { throw new RuntimeException('not_found'); }
+  $m['status'] = from_db($m['status']);
   if ($m['status'] !== 'pending') { throw new RuntimeException('not_pending'); }
   if ($uid !== (int)$m['driver_user_id'] && $uid !== (int)$m['passenger_user_id']) {
     throw new RuntimeException('forbidden');
   }
 
-  $pdo->prepare("UPDATE ride_matches SET status='cancelled', updated_at=NOW() WHERE id=:mid")
-      ->execute([':mid'=>$matchId]);
+  $pdo->prepare("UPDATE ride_matches SET status=:status, updated_at=NOW() WHERE id=:mid")
+      ->execute([':status'=>to_db('cancelled'), ':mid'=>$matchId]);
 
   $pdo->commit();
   echo json_encode(['ok'=>true]);

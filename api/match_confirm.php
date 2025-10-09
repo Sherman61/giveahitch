@@ -5,8 +5,10 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/status.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Status\{from_db, to_db};
 
 start_secure_session();
 require_login();
@@ -45,6 +47,7 @@ try {
         echo json_encode(['ok'=>false,'error'=>'not_found']);
         exit;
     }
+    $ride['status'] = from_db($ride['status'] ?? 'open');
     if ((int)$ride['user_id'] !== $uid) {
         $pdo->rollBack();
         http_response_code(403);
@@ -74,6 +77,7 @@ try {
         echo json_encode(['ok'=>false,'error'=>'match_not_found']);
         exit;
     }
+    $match['status'] = from_db($match['status']);
     if ($match['status'] !== 'pending') {
         $pdo->rollBack();
         http_response_code(409);
@@ -84,29 +88,29 @@ try {
     // Accept chosen match
     $pdo->prepare("
         UPDATE ride_matches
-        SET status = 'confirmed', confirmed_at = NOW()
+        SET status = :status, confirmed_at = NOW()
         WHERE id = :mid
-    ")->execute([':mid'=>$matchId]);
+    ")->execute([':status'=>to_db('confirmed'), ':mid'=>$matchId]);
 
     // Reject all other pending matches for this ride
     $pdo->prepare("
         UPDATE ride_matches
-        SET status = 'rejected'
-        WHERE ride_id = :rid AND status = 'pending' AND id <> :mid
-    ")->execute([':rid'=>$rideId, ':mid'=>$matchId]);
+        SET status = :status
+        WHERE ride_id = :rid AND status = :pending AND id <> :mid
+    ")->execute([':status'=>to_db('rejected'), ':pending'=>to_db('pending'), ':rid'=>$rideId, ':mid'=>$matchId]);
 
     // Update ride status and (if exists) confirmed_match_id
     try {
         $pdo->prepare("
             UPDATE rides
-            SET status = 'matched', confirmed_match_id = :mid
+            SET status = :status, confirmed_match_id = :mid
             WHERE id = :rid
-        ")->execute([':mid'=>$matchId, ':rid'=>$rideId]);
+        ")->execute([':status'=>to_db('matched'), ':mid'=>$matchId, ':rid'=>$rideId]);
     } catch (\PDOException $e) {
         if (stripos($e->getMessage(), 'Unknown column') !== false) {
             $pdo->prepare("
-                UPDATE rides SET status = 'matched' WHERE id = :rid
-            ")->execute([':rid'=>$rideId]);
+                UPDATE rides SET status = :status WHERE id = :rid
+            ")->execute([':status'=>to_db('matched'), ':rid'=>$rideId]);
         } else {
             throw $e;
         }
