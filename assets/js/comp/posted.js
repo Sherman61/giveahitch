@@ -70,13 +70,30 @@ function ratingStarRow(onPick){
 
 async function load(el){
   el.innerHTML = `
-    <h1 class="h4 mb-3">I posted (offers & looking)</h1>
+    <h1 class="h4 mb-2">I posted (offers & looking)</h1>
+    <p class="text-secondary small mb-4">Manage the rides you created. Active rides stay at the top; once a ride is finished or cancelled it moves into the history lists below.</p>
     <div id="ownMsg" class="d-none alert"></div>
-    <div id="ownList" class="vstack gap-3"></div>
+    <section class="mb-4">
+      <h2 class="h6 text-success d-flex align-items-center gap-2">Active rides</h2>
+      <p class="text-secondary small mb-2">Start trips, mark them complete, or cancel if plans change.</p>
+      <div id="activeList" class="vstack gap-3"></div>
+    </section>
+    <section class="mb-4">
+      <h2 class="h6 text-primary d-flex align-items-center gap-2">Completed rides</h2>
+      <p class="text-secondary small mb-2">Remember to rate the other rider when a trip wraps up.</p>
+      <div id="completedList" class="vstack gap-3"></div>
+    </section>
+    <section class="mb-4">
+      <h2 class="h6 text-secondary d-flex align-items-center gap-2">Cancelled / Rejected</h2>
+      <p class="text-secondary small mb-2">These are archived for your records.</p>
+      <div id="cancelledList" class="vstack gap-3"></div>
+    </section>
   `;
 
-  const msg  = el.querySelector('#ownMsg');
-  const list = el.querySelector('#ownList');
+  const msg        = el.querySelector('#ownMsg');
+  const activeWrap = el.querySelector('#activeList');
+  const doneWrap   = el.querySelector('#completedList');
+  const cancelWrap = el.querySelector('#cancelledList');
 
   let data;
   try {
@@ -98,31 +115,52 @@ async function load(el){
 
   const items = Array.isArray(data.items) ? data.items : [];
   if (!items.length){
-    list.innerHTML = '<div class="alert alert-info">No rides yet.</div>';
+    activeWrap.innerHTML = '<div class="alert alert-info">You have not posted any rides yet.</div>';
+    doneWrap.innerHTML = '';
+    cancelWrap.innerHTML = '';
     return;
   }
 
-  list.innerHTML = '';
+  const groups = { active: [], completed: [], cancelled: [] };
   for (const item of items){
-    const dt = item.ride_datetime ? new Date(item.ride_datetime.replace(' ','T')+'Z').toLocaleString() : 'Any time';
-    const seats = (item.package_only || item.seats===0) ? 'Package only' : `${item.seats} seat(s)`;
-    const st = item.status || 'open';
-    const card = document.createElement('div');
-    card.className = 'card ride-card shadow-sm';
+    if (item.status === 'completed') groups.completed.push(item);
+    else if (item.status === 'cancelled' || item.status === 'rejected') groups.cancelled.push(item);
+    else groups.active.push(item);
+  }
 
-    // If there’s a confirmed match, show both roles clearly
-    let rolesHtml = '';
-    if (item.confirmed){
-      const d = item.confirmed;
-      rolesHtml = `
+  const renderList = (wrap, list, emptyHtml) => {
+    if (!list.length) {
+      wrap.innerHTML = emptyHtml;
+      return;
+    }
+    wrap.innerHTML = '';
+    list.forEach(item => wrap.appendChild(renderCard(item, el)));
+  };
+
+  renderList(activeWrap, groups.active, '<div class="alert alert-info">No active rides. Create one to get started!</div>');
+  renderList(doneWrap, groups.completed, '<div class="alert alert-info">No completed rides yet.</div>');
+  renderList(cancelWrap, groups.cancelled, '<div class="alert alert-secondary">No cancelled rides.</div>');
+}
+
+function renderCard(item, el){
+  const dt = item.ride_datetime ? new Date(item.ride_datetime.replace(' ','T')+'Z').toLocaleString() : 'Any time';
+  const seats = (item.package_only || item.seats===0) ? 'Package only' : `${item.seats} seat(s)`;
+  const st = item.status || 'open';
+  const card = document.createElement('div');
+  card.className = 'card ride-card shadow-sm';
+
+  let rolesHtml = '';
+  if (item.confirmed){
+    const d = item.confirmed;
+    rolesHtml = `
         <div class="mt-2">
           <div class="d-flex align-items-center gap-2"><span class="badge text-bg-primary">Driver</span><span>${esc(d.driver_display||('User #'+d.driver_user_id))}</span></div>
           <div class="d-flex align-items-center gap-2 mt-1"><span class="badge text-bg-success">Passenger</span><span>${esc(d.passenger_display||('User #'+d.passenger_user_id))}</span></div>
           <div class="mt-1"><strong>Contact:</strong> ${contactHtml(d.driver_phone||'', d.driver_whatsapp||'')} ${contactHtml(d.passenger_phone||'', d.passenger_whatsapp||'')}</div>
         </div>`;
-    }
+  }
 
-    card.innerHTML = `
+  card.innerHTML = `
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center">
           <div>
@@ -143,89 +181,75 @@ async function load(el){
         </div>
       </div>`;
 
-    const actions = card.querySelector(`#actions-${item.id}`);
+  const actions = card.querySelector(`#actions-${item.id}`);
+  const addBtn = (txt, cls, handler) => {
+    const b = document.createElement('button');
+    b.className = `btn btn-sm ${cls} ms-2`;
+    b.textContent = txt;
+    b.addEventListener('click', handler);
+    actions.appendChild(b);
+  };
 
-    // ACTIONS for owner (manage until completed)
-    // API you should expose (minimal):
-    // - match_confirm.php {ride_id, match_id, csrf}
-    // - ride_set_status.php {ride_id, status: 'in_progress'|'completed'|'cancelled', csrf}
-    // - ride_delete.php {id, csrf}
-    // - rate_submit.php {ride_id, target_user_id, stars, role: 'driver'|'passenger', csrf}
-    const addBtn = (txt, cls, handler) => {
-      const b = document.createElement('button');
-      b.className = `btn btn-sm ${cls} ms-2`;
-      b.textContent = txt;
-      b.addEventListener('click', handler);
-      actions.appendChild(b);
-    };
+  if (st === 'open'){
+    const manage = document.createElement('a');
+    manage.className = 'btn btn-sm btn-outline-success ms-2';
+    manage.href = `/manage_ride.php?id=${item.id}`;
+    manage.textContent = 'Manage';
+    actions.appendChild(manage);
 
-    if (st === 'open'){
-      const manage = document.createElement('a');
-      manage.className = 'btn btn-sm btn-outline-success ms-2';
-      manage.href = `/manage_ride.php?id=${item.id}`;
-      manage.textContent = 'Manage';
-      actions.appendChild(manage);
-
-      const del = document.createElement('button');
-      del.className='btn btn-sm btn-outline-danger ms-2';
-      del.textContent='Delete';
-      del.addEventListener('click', async ()=>{
-        if(!confirm('Delete this ride?')) return;
-        try { await postJSON(`${window.API_BASE}/ride_delete.php`, {id:item.id}); load(el); }
-        catch(e){ logError('posted:delete_failed', e, { rideId: item.id }); alert('Delete failed'); }
-      });
-      actions.appendChild(del);
-    }
-
-    if (st === 'matched' && item.confirmed){
-      addBtn('Start trip', 'btn-outline-primary', async ()=>{
-        try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'in_progress'}); load(el); }
-        catch(e){ handleActionError('posted:start_failed', e, 'Failed to start this ride.', { rideId: item.id }); }
-      });
-      addBtn('Complete', 'btn-primary', async ()=>{
-        try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
-        catch(e){ handleActionError('posted:complete_failed', e, 'Failed to mark the ride complete.', { rideId: item.id }); }
-      });
-      addBtn('Cancel', 'btn-outline-secondary', async ()=>{
-        if(!confirm('Cancel this ride?')) return;
-        try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'cancelled'}); load(el); }
-        catch(e){ handleActionError('posted:cancel_failed', e, 'Failed to cancel this ride.', { rideId: item.id }); }
-      });
-    }
-
-    if (st === 'in_progress' && item.confirmed){
-      addBtn('Complete', 'btn-primary', async ()=>{
-        try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
-        catch(e){ handleActionError('posted:complete_failed', e, 'Failed to mark the ride complete.', { rideId: item.id }); }
-      });
-    }
-
-    if (st === 'completed' && item.confirmed){
-      // show Rate button if not already rated
-      if (!item.already_rated){
-        const rateBtn = document.createElement('button');
-        rateBtn.className='btn btn-sm btn-warning ms-2';
-        rateBtn.textContent='Rate';
-        rateBtn.addEventListener('click', ()=>{
-          rateBtn.replaceWith(ratingStarRow(async (stars)=>{
-            try{
-              // who do I rate? If I created the ride and it was an offer → I’m the driver: rate passenger.
-              // If I created the ride and it was a request → I’m the passenger: rate driver.
-              const targetId = (item.type==='offer') ? item.confirmed.passenger_user_id : item.confirmed.driver_user_id;
-              const role     = (item.type==='offer') ? 'passenger' : 'driver';
-              await postJSON(`${window.API_BASE}/rate_submit.php`, {
-                ride_id: item.id, target_user_id: targetId, stars, role
-              });
-              load(el);
-            }catch(e){ logError('posted:rating_failed', e, { rideId: item.id, targetId: item.confirmed?.match_id }); alert('Rating failed'); }
-          }));
-        });
-        actions.appendChild(rateBtn);
-      }
-    }
-
-    list.appendChild(card);
+    const del = document.createElement('button');
+    del.className='btn btn-sm btn-outline-danger ms-2';
+    del.textContent='Delete';
+    del.addEventListener('click', async ()=>{
+      if(!confirm('Delete this ride?')) return;
+      try { await postJSON(`${window.API_BASE}/ride_delete.php`, {id:item.id}); load(el); }
+      catch(e){ logError('posted:delete_failed', e, { rideId: item.id }); alert('Delete failed'); }
+    });
+    actions.appendChild(del);
   }
+
+  if (st === 'matched' && item.confirmed){
+    addBtn('Start trip', 'btn-outline-primary', async ()=>{
+      try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'in_progress'}); load(el); }
+      catch(e){ handleActionError('posted:start_failed', e, 'Failed to start this ride.', { rideId: item.id }); }
+    });
+    addBtn('Complete', 'btn-primary', async ()=>{
+      try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
+      catch(e){ handleActionError('posted:complete_failed', e, 'Failed to mark the ride complete.', { rideId: item.id }); }
+    });
+    addBtn('Cancel', 'btn-outline-secondary', async ()=>{
+      if(!confirm('Cancel this ride?')) return;
+      try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'cancelled'}); load(el); }
+      catch(e){ handleActionError('posted:cancel_failed', e, 'Failed to cancel this ride.', { rideId: item.id }); }
+    });
+  }
+
+  if (st === 'in_progress' && item.confirmed){
+    addBtn('Complete', 'btn-primary', async ()=>{
+      try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'completed'}); load(el); }
+      catch(e){ handleActionError('posted:complete_failed', e, 'Failed to mark the ride complete.', { rideId: item.id }); }
+    });
+  }
+
+  if (st === 'completed' && item.confirmed && !item.already_rated){
+    const rateBtn = document.createElement('button');
+    rateBtn.className='btn btn-sm btn-warning ms-2';
+    rateBtn.textContent='Rate';
+    rateBtn.addEventListener('click', ()=>{
+      rateBtn.replaceWith(ratingStarRow(async (stars)=>{
+        try{
+          await postJSON(`${window.API_BASE}/rate_submit.php`, {
+            match_id: item.confirmed.match_id,
+            stars
+          });
+          load(el);
+        }catch(e){ logError('posted:rating_failed', e, { rideId: item.id, matchId: item.confirmed?.match_id }); alert('Rating failed'); }
+      }));
+    });
+    actions.appendChild(rateBtn);
+  }
+
+  return card;
 }
 
 export function mountPosted(el){ load(el); }

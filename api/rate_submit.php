@@ -80,26 +80,34 @@ try {
   ]);
 
   // Update aggregates on users
-  if ($isPassenger) {
-    // I am passenger -> I rate the driver
-    $pdo->prepare("UPDATE users
-                   SET driver_rating_sum = driver_rating_sum + :s,
-                       driver_rating_count = driver_rating_count + 1,
-                       score = score + IF(:s5=1, 50, 0)
-                   WHERE id=:u")
-        ->execute([':s'=>$stars, ':s5'=>($stars===5?1:0), ':u'=>$rateeId]);
-  } else {
-    // I am driver -> I rate the passenger
-    $pdo->prepare("UPDATE users
-                   SET passenger_rating_sum = passenger_rating_sum + :s,
-                       passenger_rating_count = passenger_rating_count + 1,
-                       score = score + IF(:s5=1, 50, 0)
-                   WHERE id=:u")
-        ->execute([':s'=>$stars, ':s5'=>($stars===5?1:0), ':u'=>$rateeId]);
-  }
+  $roleRated = $isPassenger ? 'driver' : 'passenger';
+  $sumField   = $roleRated . '_rating_sum';
+  $countField = $roleRated . '_rating_count';
+
+  $pdo->prepare("UPDATE users
+                 SET {$sumField} = {$sumField} + :s,
+                     {$countField} = {$countField} + 1,
+                     score = score + IF(:s5=1, 50, 0)
+                 WHERE id=:u")
+      ->execute([':s'=>$stars, ':s5'=>($stars===5?1:0), ':u'=>$rateeId]);
+
+  $totals = $pdo->prepare("SELECT {$sumField} AS sum_val, {$countField} AS count_val FROM users WHERE id=:u");
+  $totals->execute([':u'=>$rateeId]);
+  $row = $totals->fetch(PDO::FETCH_ASSOC) ?: ['sum_val'=>0,'count_val'=>0];
+  $count = (int)($row['count_val'] ?? 0);
+  $avg = $count > 0 ? round((float)($row['sum_val'] ?? 0) / $count, 2) : null;
 
   $pdo->commit();
-  echo json_encode(['ok'=>true]);
+  echo json_encode([
+    'ok' => true,
+    'rating' => [
+      'role' => $roleRated,
+      'average' => $avg,
+      'count' => $count,
+      'stars' => $stars,
+      'ratee_user_id' => $rateeId,
+    ],
+  ]);
 } catch (RuntimeException $e) {
   $pdo->rollBack();
   $code = $e->getMessage();
