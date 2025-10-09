@@ -57,7 +57,9 @@ try {
   $activeMatch = null;
   if (in_array($newStatus, ['in_progress','completed'], true)) {
     $statusesForSelect = ['accepted','confirmed','in_progress','completed'];
-    $quoted = array_map(fn(string $s) => $pdo->quote(to_db($s)), $statusesForSelect);
+    $quoted = array_map(function (string $status) use ($pdo) {
+        return $pdo->quote(to_db($status));
+    }, $statusesForSelect);
     $matchSql = "
       SELECT * FROM ride_matches
       WHERE ride_id=:rid AND status IN (" . implode(',', $quoted) . ")
@@ -107,7 +109,9 @@ try {
 
   if ($newStatus === 'cancelled') {
     $statusesToCancel = ['pending','accepted','confirmed','in_progress'];
-    $quotedCancel = array_map(fn(string $s) => $pdo->quote(to_db($s)), $statusesToCancel);
+    $quotedCancel = array_map(function (string $status) use ($pdo) {
+        return $pdo->quote(to_db($status));
+    }, $statusesToCancel);
     $inList = implode(',', $quotedCancel);
     $pdo->prepare("UPDATE ride_matches SET status=:cancelled, updated_at=NOW() WHERE ride_id=:rid AND status IN ($inList)")
         ->execute([':cancelled'=>to_db('cancelled'), ':rid'=>$rideId]);

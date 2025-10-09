@@ -43,7 +43,12 @@ if ($r['type'] === 'offer') {
 }
 
 // prevent duplicate active matches
-$ex = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','completed','in_progress'])) . ") LIMIT 1");
+    $statusList = ['accepted','completed','in_progress'];
+    $quotedStatuses = array_map(function (string $status) use ($pdo) {
+        return $pdo->quote(to_db($status));
+    }, $statusList);
+
+    $ex = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN (" . implode(',', $quotedStatuses) . ") LIMIT 1");
 $ex->execute([':rid' => $rideId]);
 if ($ex->fetch()) { $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'already_matched']); exit; }
 

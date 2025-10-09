@@ -45,7 +45,12 @@ if ($ride['type'] === 'offer') {
 }
 
 /* if already fully matched, block; but allow multiple pendings */
-$final = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','in_progress','completed'])) . ") LIMIT 1");
+    $statusList = ['accepted','in_progress','completed'];
+    $quotedStatuses = array_map(function (string $status) use ($pdo) {
+        return $pdo->quote(to_db($status));
+    }, $statusList);
+
+    $final = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN (" . implode(',', $quotedStatuses) . ") LIMIT 1");
 $final->execute([':rid' => $rideId]);
 if ($final->fetch()) { $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'already_final']); exit; }
 

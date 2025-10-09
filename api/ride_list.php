@@ -84,6 +84,11 @@ try {
 
     // Attach `confirmed` block per ride (if any match is accepted/in_progress/completed)
     $out = [];
+    $statusList = ['accepted','confirmed','in_progress','completed'];
+    $quotedStatuses = array_map(function (string $status) use ($pdo) {
+        return $pdo->quote(to_db($status));
+    }, $statusList);
+
     $matchSql = "
       SELECT
         m.id AS match_id, m.status, m.confirmed_at, m.updated_at, m.created_at,
@@ -94,7 +99,7 @@ try {
       JOIN users du ON du.id = m.driver_user_id
       JOIN users pu ON pu.id = m.passenger_user_id
       WHERE m.ride_id = :rid
-        AND m.status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','confirmed','in_progress','completed'])) . ")
+        AND m.status IN (" . implode(',', $quotedStatuses) . ")
       ORDER BY COALESCE(m.confirmed_at, m.updated_at, m.created_at) DESC
       LIMIT 1";
     $mStmt = $pdo->prepare($matchSql);

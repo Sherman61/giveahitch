@@ -84,6 +84,15 @@ $pending = $pendingStmt->fetchAll(PDO::FETCH_ASSOC);
  */
 $otherCol = ($ride['type'] === 'offer') ? 'passenger_user_id' : 'driver_user_id';
 
+$statusOrder = ['confirmed','accepted','in_progress','completed'];
+$statusFilter = ['accepted','confirmed','in_progress','completed'];
+$quotedFilter = array_map(function (string $status) use ($pdo) {
+    return $pdo->quote(to_db($status));
+}, $statusFilter);
+$quotedOrder = array_map(function (string $status) use ($pdo) {
+    return $pdo->quote(to_db($status));
+}, $statusOrder);
+
 $confirmedSql = "
 SELECT
     m.id              AS match_id,
@@ -97,8 +106,8 @@ SELECT
 FROM ride_matches m
 JOIN users u ON u.id = m.$otherCol
 WHERE m.ride_id = :rid
-  AND m.status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','confirmed','in_progress','completed'])) . ")
-ORDER BY FIELD(m.status," . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['confirmed','accepted','in_progress','completed'])) . "), m.created_at DESC
+  AND m.status IN (" . implode(',', $quotedFilter) . ")
+ORDER BY FIELD(m.status," . implode(',', $quotedOrder) . "), m.created_at DESC
 LIMIT 1
 ";
 $confStmt = $pdo->prepare($confirmedSql);
