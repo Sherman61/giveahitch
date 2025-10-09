@@ -64,12 +64,12 @@ $csrf = csrf_token();
               </div>
               <div class="col-md-6">
                 <label class="form-label">Phone</label>
-                <input type="tel" class="form-control" name="phone" placeholder="+1 718 555 1234" pattern="^\+?[0-9\s\-\(\)]{7,20}$">
+                <input type="tel" class="form-control" name="phone" placeholder="+1 718 555 1234" pattern="^\+?[0-9\s\-\(\)]{7,32}$">
                 <div class="invalid-feedback">Invalid phone.</div>
               </div>
               <div class="col-12">
                 <label class="form-label">WhatsApp (optional)</label>
-                <input type="tel" class="form-control" name="whatsapp" placeholder="+1 347 555 7890" pattern="^\+?[0-9\s\-\(\)]{7,20}$">
+                <input type="tel" class="form-control" name="whatsapp" placeholder="+1 347 555 7890" pattern="^\+?[0-9\s\-\(\)]{7,32}$">
                 <div class="invalid-feedback">Invalid WhatsApp.</div>
               </div>
               <div class="col-12">

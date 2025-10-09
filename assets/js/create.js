@@ -6,7 +6,7 @@
     alertBox.innerHTML = `<div class="alert alert-${type} mb-0">${msg}</div>`;
   }
 
-  function okPhone(s){ return s === '' || /^\+?[0-9\s\-()]{7,20}$/.test(s); }
+  function okPhone(s){ return s === '' || /^\+?[0-9\s\-()]{7,32}$/.test(s); }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
