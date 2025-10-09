@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Oct 09, 2025 at 04:47 AM
+-- Generation Time: Oct 09, 2025 at 08:52 AM
 -- Server version: 8.0.43-0ubuntu0.24.04.1
 -- PHP Version: 8.3.6
 
@@ -42,7 +42,7 @@ CREATE TABLE `app_errors` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
- 
+
 --
 -- Table structure for table `feedback`
 --
@@ -93,6 +93,7 @@ CREATE TABLE `rides` (
   `from_text` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `to_text` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `ride_datetime` datetime DEFAULT NULL,
+  `ride_end_datetime` datetime DEFAULT NULL,
   `seats` tinyint UNSIGNED NOT NULL DEFAULT '1',
   `package_only` tinyint(1) NOT NULL DEFAULT '0',
   `note` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -113,6 +114,26 @@ CREATE TABLE `rides` (
 --
 -- Dumping data for table `rides`
 --
+
+INSERT INTO `rides` (`id`, `type`, `from_text`, `to_text`, `ride_datetime`, `ride_end_datetime`, `seats`, `package_only`, `note`, `phone`, `whatsapp`, `status`, `confirmed_match_id`, `user_id`, `created_at`, `updated_at`, `deleted`, `from_lat`, `from_lng`, `to_lat`, `to_lng`) VALUES
+(1, 'offer', 'boro park', 'monsey', NULL, NULL, 1, 0, '', '(845) 244-1202', '', 'cancelled', NULL, NULL, '2025-08-20 06:00:22', NULL, 1, NULL, NULL, NULL, NULL),
+(2, 'request', 'monticello ny', 'monsey ny', NULL, NULL, 1, 0, 'i need a ride sometime next week. latest tuesday', '18454133056', '8452441202', 'cancelled', NULL, NULL, '2025-08-20 12:19:41', NULL, 1, NULL, NULL, NULL, NULL),
+(3, 'offer', 'boro park', 'monsey ny', NULL, NULL, 1, 0, 'test', '', '8452441202', 'matched', NULL, NULL, '2025-08-20 19:05:16', NULL, 0, NULL, NULL, NULL, NULL),
+(4, 'request', 'monticello ny', 'monsey ny', NULL, NULL, 1, 0, 'test ride with user id', '+18452441202', '8452441202', 'open', NULL, 2, '2025-08-21 06:56:02', NULL, 0, NULL, NULL, NULL, NULL),
+(5, 'offer', 'boro park', 'monsey ny', NULL, NULL, 2, 0, '', '', '', 'cancelled', NULL, 2, '2025-08-21 07:55:40', NULL, 1, NULL, NULL, NULL, NULL),
+(6, 'offer', 'boro park', 'monsey ny', '2025-08-21 04:06:00', NULL, 1, 0, '', '', '', 'matched', NULL, 2, '2025-08-21 08:07:05', NULL, 0, NULL, NULL, NULL, NULL),
+(7, 'offer', 'boro park', 'monsey ny', NULL, NULL, 1, 0, '', '', '', 'open', NULL, 2, '2025-08-21 08:08:37', NULL, 0, NULL, NULL, NULL, NULL),
+(8, 'offer', 'boro park', 'monsey ny', '2025-08-21 04:36:00', NULL, 1, 0, '', '', '', 'open', NULL, 2, '2025-08-21 08:36:24', NULL, 0, NULL, NULL, NULL, NULL),
+(9, 'offer', 'boro park', 'monsey ny', NULL, NULL, 1, 0, '', '', '', 'open', NULL, 2, '2025-08-21 09:00:27', NULL, 0, NULL, NULL, NULL, NULL),
+(10, 'offer', 'boro park', 'monsey ny', NULL, NULL, 1, 0, '', '', '', 'open', NULL, 2, '2025-08-21 09:01:29', NULL, 0, NULL, NULL, NULL, NULL),
+(11, 'offer', 'boro park', 'monsey ny', NULL, NULL, 1, 0, '', '', '', 'open', NULL, 2, '2025-08-21 09:01:53', NULL, 0, NULL, NULL, NULL, NULL),
+(12, 'offer', 'monticello ny', 'monsey ny', '2025-08-21 05:02:00', NULL, 2, 0, '', '8454133', '', 'open', NULL, 2, '2025-08-21 09:03:13', NULL, 0, NULL, NULL, NULL, NULL),
+(13, 'offer', 'monsey', 'lakewood', '2025-10-06 09:33:00', NULL, 1, 0, '', '8454133056', '18452441202', 'cancelled', NULL, 3, '2025-10-06 01:34:03', NULL, 1, NULL, NULL, NULL, NULL),
+(14, 'request', 'monsey', 'lakewood', '2025-10-06 09:21:00', NULL, 1, 0, '', '8454133056', '', 'matched', NULL, 3, '2025-10-06 01:35:41', NULL, 0, NULL, NULL, NULL, NULL),
+(15, 'offer', 'monsey', 'lakewood', NULL, NULL, 1, 0, 'test', '8454133056', '', 'matched', 13, 4, '2025-10-06 06:02:31', '2025-10-09 02:29:41', 0, NULL, NULL, NULL, NULL),
+(16, 'request', 'monsey', 'lakewood', '2025-10-06 03:26:00', NULL, 1, 0, '', '8454133056', '', 'open', NULL, 3, '2025-10-06 07:26:21', NULL, 0, NULL, NULL, NULL, NULL),
+(17, 'offer', 'monsey', 'lakewood nj', '2025-10-08 22:42:00', NULL, 2, 0, 'im offering a ride from ...', '8454133056', '18452441202', 'open', NULL, 4, '2025-10-09 02:43:00', '2025-10-09 02:43:00', 0, NULL, NULL, NULL, NULL),
+(18, 'offer', 'monsey', 'lakewood', NULL, NULL, 1, 0, NULL, '8454133056', NULL, 'open', NULL, 3, '2025-10-09 05:49:19', '2025-10-09 05:49:19', 0, NULL, NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -137,6 +158,15 @@ CREATE TABLE `ride_matches` (
 
 INSERT INTO `ride_matches` (`id`, `ride_id`, `driver_user_id`, `passenger_user_id`, `status`, `created_at`, `updated_at`, `confirmed_at`) VALUES
 (2, 6, 2, 3, 'accepted', '2025-10-06 04:28:38', '2025-10-06 04:28:38', NULL),
+(3, 14, 4, 3, 'accepted', '2025-10-06 04:31:51', '2025-10-06 04:31:51', NULL),
+(4, 8, 2, 3, 'pending', '2025-10-06 04:41:28', '2025-10-06 04:41:28', NULL),
+(5, 8, 3, 4, 'cancelled', '2025-10-06 06:00:35', '2025-10-09 03:31:20', NULL),
+(6, 12, 2, 4, 'pending', '2025-10-06 06:02:11', '2025-10-06 06:02:11', NULL),
+(7, 4, 4, 2, 'pending', '2025-10-06 06:02:52', '2025-10-06 06:02:52', NULL),
+(8, 7, 2, 3, 'pending', '2025-10-06 07:33:01', '2025-10-09 01:47:04', NULL),
+(9, 4, 3, 2, 'pending', '2025-10-06 07:41:58', '2025-10-06 07:41:58', NULL),
+(13, 15, 4, 3, 'accepted', '2025-10-09 02:12:13', '2025-10-09 02:29:41', '2025-10-09 02:29:41'),
+(14, 17, 4, 2, 'pending', '2025-10-09 06:44:03', '2025-10-09 06:44:03', NULL);
 
 -- --------------------------------------------------------
 
@@ -170,6 +200,10 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `email`, `password_hash`, `display_name`, `rides_offered_count`, `rides_requested_count`, `rides_given_count`, `rides_received_count`, `score`, `driver_rating_sum`, `driver_rating_count`, `passenger_rating_sum`, `passenger_rating_count`, `is_admin`, `username`, `phone`, `whatsapp`, `created_at`) VALUES
+(1, 'admin@shiyaswebsite.com', '$2y$10$eA3qk4x5v0osTTo9JQz2V.5t2s5sVZb6c8z2b3V4qUO8s2o7m4mIy', 'Site Admin', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, '2025-08-20 15:15:25'),
+(2, 'shermanshiya@gmail.com', '$2y$10$Be4xsnD8R5.DPTtFlNDBi.u81ITZ5PrQLviJfy5p4Sr0dgIN2Ntru', 'shiya s', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, '2025-08-20 18:28:43'),
+(3, 'shermanshiya+1@gmail.com', '$2y$10$kMLK94fg659GpS70vTVljeDQB7FMVlJBlRV0UHxbI6otHZX6HrIZy', 'Shiya Sherman', 1, 0, 0, 0, 100, 0, 0, 0, 0, 0, NULL, '8454133056', '8452441202', '2025-10-06 00:58:44'),
+(4, 'shermanshiya+2@gmail.com', '$2y$10$tOtEXJv/z5JqSlP.VYJBneDQU1roki2Pe02k373H.3sI6K6dEW1ES', 'dev tester', 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, '2025-10-06 04:31:37');
 
 --
 -- Indexes for dumped tables
@@ -259,7 +293,7 @@ ALTER TABLE `rate_limits`
 -- AUTO_INCREMENT for table `rides`
 --
 ALTER TABLE `rides`
-  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `ride_matches`
