@@ -28,7 +28,7 @@ try {
     $isAdmin = $user && !empty($user['is_admin']);
 
     $sql = "SELECT
-              r.id, r.user_id, r.type, r.from_text, r.to_text, r.ride_datetime,
+              r.id, r.user_id, r.type, r.from_text, r.to_text, r.ride_datetime, r.ride_end_datetime,
               r.seats, r.package_only, r.note, r.phone, r.whatsapp,
               r.status, r.created_at,
               u.display_name AS owner_display
@@ -49,6 +49,9 @@ try {
                 $params[':status'] = to_db((string)$_GET['status']);
             }
         }
+
+        $sql .= " AND ((r.ride_end_datetime IS NOT NULL AND r.ride_end_datetime >= DATE_SUB(NOW(), INTERVAL 6 HOUR))
+                      OR (r.ride_end_datetime IS NULL AND (r.ride_datetime IS NULL OR r.ride_datetime >= DATE_SUB(NOW(), INTERVAL 6 HOUR))))";
     }
 
     if ($type === 'offer' || $type === 'request') {
@@ -70,7 +73,7 @@ try {
         $params[':uid'] = (int)$user['id'];
     }
 
-    $sql .= " ORDER BY COALESCE(r.ride_datetime, r.created_at) ASC LIMIT :lim";
+    $sql .= " ORDER BY COALESCE(r.ride_datetime, r.ride_end_datetime, r.created_at) ASC LIMIT :lim";
 
     $stmt = $pdo->prepare($sql);
     foreach ($params as $k => $v) $stmt->bindValue($k, $v);
