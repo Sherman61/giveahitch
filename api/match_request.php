@@ -5,8 +5,10 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/status.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Status\{from_db, to_db};
 
 start_secure_session();
 require_login();
@@ -25,6 +27,7 @@ $stmt = $pdo->prepare("SELECT id, user_id, type, status FROM rides WHERE id=:id 
 $stmt->execute([':id' => $rideId]);
 $ride = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$ride) { $pdo->rollBack(); http_response_code(404); echo json_encode(['ok'=>false,'error'=>'not_found']); exit; }
+$ride['status'] = from_db($ride['status'] ?? 'open');
 if ($ride['status'] !== 'open') { $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'not_open']); exit; }
 
 $me = current_user();
@@ -42,7 +45,7 @@ if ($ride['type'] === 'offer') {
 }
 
 /* if already fully matched, block; but allow multiple pendings */
-$final = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN ('accepted','in_progress','completed') LIMIT 1");
+$final = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','in_progress','completed'])) . ") LIMIT 1");
 $final->execute([':rid' => $rideId]);
 if ($final->fetch()) { $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'already_final']); exit; }
 
@@ -52,6 +55,7 @@ $dupe = $pdo->prepare("SELECT id, status FROM ride_matches
                        ORDER BY id DESC LIMIT 1");
 $dupe->execute([':rid'=>$rideId, ':d'=>$driver, ':p'=>$pass]);
 if ($row = $dupe->fetch(PDO::FETCH_ASSOC)) {
+  $row['status'] = from_db($row['status']);
   if (in_array($row['status'], ['pending','accepted','in_progress','completed'], true)) {
     $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'already_requested']); exit;
   }
@@ -59,8 +63,8 @@ if ($row = $dupe->fetch(PDO::FETCH_ASSOC)) {
 
 /* create PENDING */
 $ins = $pdo->prepare("INSERT INTO ride_matches(ride_id,driver_user_id,passenger_user_id,status)
-                      VALUES(:rid,:d,:p,'pending')");
-$ins->execute([':rid'=>$rideId, ':d'=>$driver, ':p'=>$pass]);
+                      VALUES(:rid,:d,:p,:status)");
+$ins->execute([':rid'=>$rideId, ':d'=>$driver, ':p'=>$pass, ':status'=>to_db('pending')]);
 
 $matchId = (int)$pdo->lastInsertId();
 

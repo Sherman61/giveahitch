@@ -5,8 +5,10 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/status.php';
 
 use function App\Auth\{require_login, current_user};
+use function App\Status\from_db;
 
 start_secure_session();
 require_login();
@@ -87,6 +89,7 @@ try {
 
     // Frontend expects `already_rated` boolean; mark true when a rating exists.
     foreach ($rows as &$row) {
+        $row['match_status'] = from_db($row['match_status']);
         $row['already_rated'] = isset($ratedSet[(int)$row['match_id']]);
         // For convenience: also expose the two “other party” fields used in driver.js layout
         $row['other_display_driver']    = $row['driver_display'];
