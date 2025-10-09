@@ -1,0 +1,4 @@
+<?php
+echo "<h1>GlitchaHitch is live 🎉</h1>";
+echo "<p>PHP version: " . phpversion() . "</p>";
+phpinfo();
