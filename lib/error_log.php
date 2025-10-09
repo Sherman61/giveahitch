@@ -8,6 +8,56 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/auth.php';
 use PDO;
 
+/**
+ * Build a short description of the current request and the source code
+ * surrounding the failure to help with debugging.
+ */
+function build_context_snip(?string $file, ?int $line): string {
+    $parts = [];
+
+    try {
+        $method = $_SERVER['REQUEST_METHOD'] ?? '';
+        $uri    = $_SERVER['REQUEST_URI'] ?? '';
+        $ip     = $_SERVER['REMOTE_ADDR'] ?? '';
+        $ua     = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        $referer = $_SERVER['HTTP_REFERER'] ?? '';
+
+        $requestBits = array_filter([
+            $method !== '' && $uri !== '' ? sprintf('%s %s', $method, $uri) : ($uri ?: $method),
+            $ip !== '' ? sprintf('IP: %s', $ip) : null,
+            $ua !== '' ? sprintf('UA: %s', $ua) : null,
+            $referer !== '' ? sprintf('Referrer: %s', $referer) : null,
+        ]);
+
+        if ($requestBits) {
+            $parts[] = 'Request: ' . implode(' | ', $requestBits);
+        }
+
+        if ($file && $line) {
+            $snippet = [];
+            $line = max(1, $line);
+            if (is_readable($file)) {
+                $contents = @file($file);
+                if (is_array($contents)) {
+                    $start = max(1, $line - 2);
+                    $end   = min(count($contents), $line + 2);
+                    for ($i = $start; $i <= $end; $i++) {
+                        $prefix = str_pad((string)$i, 4, ' ', STR_PAD_LEFT) . ': ';
+                        $snippet[] = $prefix . rtrim($contents[$i - 1]);
+                    }
+                }
+            }
+            if ($snippet) {
+                $parts[] = "Code context:\n" . implode("\n", $snippet);
+            }
+        }
+    } catch (\Throwable $ignored) {
+        // Failure to gather context should not break logging.
+    }
+
+    return implode("\n\n", $parts);
+}
+
 function map_errno(int $errno): string {
     $map = [
         E_ERROR => 'E_ERROR', E_WARNING => 'E_WARNING', E_PARSE => 'E_PARSE',
@@ -61,6 +111,7 @@ function init_error_logging(): void {
     set_error_handler(function($errno, $errstr, $errfile, $errline) use ($user, $page, $endpoint) {
         // Respect @-operator
         if (!(error_reporting() & $errno)) return false;
+        $context = build_context_snip((string)$errfile, (int)$errline);
         save_error([
             'page'     => $page,
             'endpoint' => $endpoint,
@@ -69,6 +120,7 @@ function init_error_logging(): void {
             'file'     => (string)$errfile,
             'line'     => (int)$errline,
             'severity' => map_errno((int)$errno),
+            'context_snip' => $context,
             'user_id'  => $user['id'] ?? null,
         ]);
         return false; // let PHP’s normal handler continue (and display if display_errors=1)
@@ -77,6 +129,7 @@ function init_error_logging(): void {
     register_shutdown_function(function() use ($user, $page, $endpoint) {
         $last = error_get_last();
         if ($last && in_array($last['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+            $context = build_context_snip($last['file'] ?? null, isset($last['line']) ? (int)$last['line'] : null);
             save_error([
                 'page'     => $page,
                 'endpoint' => $endpoint,
@@ -85,7 +138,7 @@ function init_error_logging(): void {
                 'file'     => (string)$last['file'],
                 'line'     => (int)$last['line'],
                 'severity' => 'FATAL',
-                'context_snip' => 'shutdown handler captured fatal error',
+                'context_snip' => $context !== '' ? $context : 'shutdown handler captured fatal error',
                 'user_id'  => $user['id'] ?? null,
             ]);
         }
