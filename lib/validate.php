@@ -30,7 +30,7 @@ function validate_ride(array $in): array {
 
     $phone    = trim((string)($in['phone'] ?? ''));
     $whatsapp = trim((string)($in['whatsapp'] ?? ''));
-    $re = '/^\+?[0-9\s\-\(\)]{7,20}$/';
+    $re = '/^\+?[0-9\s\-\(\)]{7,32}$/';
     if ($phone !== '' && !preg_match($re, $phone))       $errors['phone']='Invalid phone number.';
     if ($whatsapp !== '' && !preg_match($re, $whatsapp)) $errors['whatsapp']='Invalid WhatsApp.';
     if ($phone === '' && $whatsapp === '') $errors['contact']='Provide phone or WhatsApp.';

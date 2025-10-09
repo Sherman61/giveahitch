@@ -7,9 +7,17 @@
 </a>
       <div class="ms-auto d-flex align-items-center gap-2">
   <?php if ($me): ?>
-    <span class="navbar-text me-1">
-      <i class="bi bi-person-circle me-1" onclick="location.href='/user.php?id=<?= (int)$me['id'] ?>'"></i><?= htmlspecialchars($me['display_name']) ?>
-    </span>
+    <span class="navbar-text text-secondary d-none d-lg-inline">Hi, <a class="text-decoration-none" href="/user.php?id=<?= (int)$me['id'] ?>"><?= htmlspecialchars($me['display_name']) ?></a></span>
+
+    <a class="btn btn-outline-secondary btn-sm" href="/user.php?id=<?= (int)$me['id'] ?>"
+       title="View profile" aria-label="View profile">
+      <i class="bi bi-person-circle"></i>
+    </a>
+
+    <a class="btn btn-outline-secondary btn-sm" href="/profile.php"
+       title="Profile settings" aria-label="Profile settings">
+      <i class="bi bi-gear"></i>
+    </a>
 
     <a class="btn btn-outline-secondary btn-sm" href="/my_rides.php"
        title="My rides" aria-label="My rides">
