@@ -20,9 +20,66 @@ const lastUpdatedEl = document.getElementById('lastUpdated');
 const meId = Number(window.ME_USER_ID || 0) || null;
 const API = typeof window.API_BASE === 'string' ? window.API_BASE : '/api';
 
+const STORAGE_KEY_ACCEPT_INTENT = 'ga_accept_ride_intent_v1';
+const ACCEPT_INTENT_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+const getStorage = () => {
+  try {
+    return window.localStorage || null;
+  } catch (err) {
+    logger.warn?.('rides:storage_unavailable', err);
+    return null;
+  }
+};
+
+const storage = getStorage();
+
+const readAcceptIntent = () => {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(STORAGE_KEY_ACCEPT_INTENT);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const rideId = Number(parsed?.rideId || 0);
+    const ts = Number(parsed?.ts || 0);
+    if (!rideId) {
+      storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
+      return null;
+    }
+    if (ts && Date.now() - ts > ACCEPT_INTENT_TTL) {
+      storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
+      return null;
+    }
+    return { rideId, ts };
+  } catch (err) {
+    logger.warn?.('rides:read_intent_failed', err);
+    storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
+    return null;
+  }
+};
+
+const rememberAcceptIntent = (rideId) => {
+  if (!storage) return;
+  try {
+    storage.setItem(STORAGE_KEY_ACCEPT_INTENT, JSON.stringify({ rideId, ts: Date.now() }));
+  } catch (err) {
+    logger.warn?.('rides:store_intent_failed', err, { rideId });
+  }
+};
+
+const clearAcceptIntent = () => {
+  if (!storage) return;
+  try {
+    storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
+  } catch (err) {
+    logger.warn?.('rides:clear_intent_failed', err);
+  }
+};
+
 let rawItems = [];
 let isFetching = false;
 let autoRefreshTimer = null;
+let pendingAcceptIntent = meId ? readAcceptIntent() : null;
 
 const rtf = (typeof Intl !== 'undefined' && Intl.RelativeTimeFormat)
   ? new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
@@ -229,10 +286,15 @@ const render = (items) => {
       ? `<a class="fw-semibold text-decoration-none" href="/user.php?id=${item.user_id}">${escapeHtml(ownerName)}</a>`
       : `<span class="fw-semibold">${escapeHtml(ownerName)}</span>`;
     const isOwn = meId && item.user_id && Number(item.user_id) === meId;
+    const showAccept = item.status === 'open' && (!item.user_id || Number(item.user_id) !== meId);
     const note = item.note ? `<div class="text-body mt-2"><i class="bi bi-chat-dots me-2 text-primary"></i>${escapeHtml(item.note)}</div>` : '';
 
     const card = document.createElement('article');
     card.className = `ride-card card shadow-sm ${cls} ${isOwn ? 'border-primary-subtle' : ''}`;
+    card.dataset.rideId = String(item.id);
+    if (pendingAcceptIntent && Number(pendingAcceptIntent.rideId) === Number(item.id)) {
+      card.classList.add('shadow-lg', 'border-success');
+    }
     card.innerHTML = `
       <div class="card-body p-4">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-4">
@@ -251,43 +313,110 @@ const render = (items) => {
           </div>
           <div class="ride-actions text-md-end">
             <div class="contact-links mb-3">${buildContactLinks(item)}</div>
-            ${(!meId || meId === item.user_id || item.status !== 'open') ? '' : `<button class="btn btn-success" data-accept="${item.id}"><i class="bi bi-check2-circle me-1"></i>Accept ride</button>`}
+            ${showAccept ? `<button class="btn btn-success" data-accept="${item.id}"><i class="bi bi-check2-circle me-1"></i>Accept ride</button>` : ''}
           </div>
         </div>
       </div>`;
 
     const btn = card.querySelector('[data-accept]');
     if (btn) {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Accept this ride?')) return;
+      btn.addEventListener('click', () => {
         const rideId = Number(btn.getAttribute('data-accept'));
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Accepting…';
-        try {
-          const res = await fetch(`${API}/match_create.php`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({ ride_id: rideId, csrf: window.CSRF_TOKEN || '' })
-          });
-          const data = await res.json().catch(() => ({ ok: false }));
-          if (!res.ok || !data.ok) {
-            throw new Error(data.error || 'Unable to accept ride');
-          }
-          alert('Accepted! Once complete, remember to confirm the ride.');
-          await fetchRides({ showLoading: false, reason: 'accept' });
-        } catch (err) {
-          logger.error('rides:accept_failed', err, { rideId });
-          alert(`Error accepting ride: ${err?.message || err}`);
-        } finally {
-          btn.disabled = false;
-          btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Accept ride';
-        }
+        if (!rideId) return;
+        const confirmMessage = meId
+          ? 'Accept this ride?'
+          : 'You need to log in or sign up to accept this ride. Continue?';
+        if (!confirm(confirmMessage)) return;
+        acceptRide(rideId, btn);
       });
     }
 
     list.appendChild(card);
   });
+};
+
+const acceptRide = async (rideId, btn = null) => {
+  if (!rideId) return;
+
+  if (!meId) {
+    rememberAcceptIntent(rideId);
+    const loginUrl = new URL('/login.php', window.location.origin);
+    loginUrl.searchParams.set('acceptRide', String(rideId));
+    window.location.href = loginUrl.toString();
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Accepting…';
+  }
+
+  try {
+    const res = await fetch(`${API}/match_create.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ ride_id: rideId, csrf: window.CSRF_TOKEN || '' })
+    });
+    const data = await res.json().catch(() => ({ ok: false }));
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || 'Unable to accept ride');
+    }
+    alert('Accepted! Once complete, remember to confirm the ride.');
+    clearAcceptIntent();
+    pendingAcceptIntent = null;
+    await fetchRides({ showLoading: false, reason: 'accept' });
+  } catch (err) {
+    logger.error('rides:accept_failed', err, { rideId });
+    alert(`Error accepting ride: ${err?.message || err}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Accept ride';
+    }
+  }
+};
+
+const maybePromptPendingAccept = () => {
+  if (!meId) return;
+  if (!pendingAcceptIntent || !pendingAcceptIntent.rideId) {
+    const params = new URLSearchParams(window.location.search);
+    const qpRide = Number(params.get('acceptRide') || params.get('accept') || 0) || 0;
+    if (qpRide) {
+      pendingAcceptIntent = { rideId: qpRide, ts: Date.now() };
+      rememberAcceptIntent(qpRide);
+    }
+    if (!pendingAcceptIntent) return;
+  }
+
+  const rideId = Number(pendingAcceptIntent.rideId);
+  if (!rideId) {
+    clearAcceptIntent();
+    pendingAcceptIntent = null;
+    return;
+  }
+
+  const ride = rawItems.find((item) => Number(item.id) === rideId);
+  if (!ride || ride.status !== 'open') {
+    clearAcceptIntent();
+    pendingAcceptIntent = null;
+    return;
+  }
+
+  if (ride.user_id && Number(ride.user_id) === meId) {
+    clearAcceptIntent();
+    pendingAcceptIntent = null;
+    return;
+  }
+
+  const message = `You wanted to accept the ride from ${ride.from_text} to ${ride.to_text}. Accept it now?`;
+  if (confirm(message)) {
+    const btn = list?.querySelector(`[data-accept="${rideId}"]`);
+    acceptRide(rideId, btn || null);
+  } else {
+    clearAcceptIntent();
+    pendingAcceptIntent = null;
+  }
 };
 
 const fetchRides = async ({ showLoading = true, reason = 'manual' } = {}) => {
@@ -313,6 +442,7 @@ const fetchRides = async ({ showLoading = true, reason = 'manual' } = {}) => {
     }
     rawItems = Array.isArray(data.items) ? data.items.filter((item) => !isExpired(item)) : [];
     render(sortItems(rawItems));
+    maybePromptPendingAccept();
     updateSummary(rawItems);
     hideError();
   } catch (err) {
