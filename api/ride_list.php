@@ -9,6 +9,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/status.php';
+require_once __DIR__ . '/../lib/privacy.php';
 
 use function App\Status\{from_db, to_db};
 
@@ -31,7 +32,8 @@ try {
               r.id, r.user_id, r.type, r.from_text, r.to_text, r.ride_datetime, r.ride_end_datetime,
               r.seats, r.package_only, r.note, r.phone, r.whatsapp,
               r.status, r.created_at,
-              u.display_name AS owner_display
+              u.display_name AS owner_display,
+              u.contact_privacy AS owner_contact_privacy
             FROM rides r
             LEFT JOIN users u ON u.id = r.user_id
             WHERE r.deleted = 0";
@@ -133,6 +135,9 @@ try {
           'passenger_display'  => $m['passenger_display'],
           'passenger_phone'    => $m['passenger_phone'],
           'passenger_whatsapp' => $m['passenger_whatsapp'],
+          'updated_at'         => $m['updated_at'],
+          'confirmed_at'       => $m['confirmed_at'],
+          'created_at'         => $m['created_at'],
         ];
         if ($myId && ($confirmed['driver_user_id'] === $myId || $confirmed['passenger_user_id'] === $myId)) {
           $ratingMatchIds[$confirmed['match_id']] = true;
@@ -140,14 +145,53 @@ try {
       }
 
       $r['status']         = from_db($r['status'] ?? 'open');
+      $viewerIsOwner = $myId && (int)$r['user_id'] === $myId;
+      $viewerHasMatch = false;
+      $matchStatus = null;
+      $matchChangedAt = null;
       if ($confirmed) {
         $confirmed['status'] = from_db($confirmed['status']);
+        $confirmed['match_changed_at'] = $confirmed['updated_at'] ?? $confirmed['confirmed_at'] ?? $confirmed['created_at'] ?? null;
+        $matchStatus = $confirmed['status'] ?? null;
+        $matchChangedAt = $confirmed['match_changed_at'] ?? null;
+        if ($myId && (($confirmed['driver_user_id'] ?? 0) === $myId || ($confirmed['passenger_user_id'] ?? 0) === $myId)) {
+          $viewerHasMatch = true;
+        }
+        $viewerCanSeeMatch = $viewerHasMatch || $viewerIsOwner || $isAdmin;
+        if (!$viewerCanSeeMatch) {
+          $confirmed['driver_phone'] = null;
+          $confirmed['driver_whatsapp'] = null;
+          $confirmed['passenger_phone'] = null;
+          $confirmed['passenger_whatsapp'] = null;
+        }
       }
       $r['confirmed']      = $confirmed;
       $r['already_rated']  = false; // default; updated below if the current user has rated this match
       $r['match_counts']   = $matchCounts[(int)$r['id']] ?? [];
       $r['owner_role']     = $r['type'] === 'offer' ? 'driver' : 'passenger';
       $r['other_role']     = $r['owner_role'] === 'driver' ? 'passenger' : 'driver';
+
+      $ownerPrivacy = (int)($r['owner_contact_privacy'] ?? 1);
+
+      $visibility = \App\Privacy\evaluate($user, [
+        'privacy' => $ownerPrivacy,
+        'viewer_is_owner' => $viewerIsOwner,
+        'viewer_is_target' => $viewerIsOwner,
+        'viewer_is_admin' => $isAdmin,
+        'viewer_logged_in' => (bool)$user,
+        'viewer_has_active_match' => $viewerHasMatch,
+        'match_status' => $matchStatus,
+        'match_changed_at' => $matchChangedAt,
+        'target_has_active_open_ride' => ($r['status'] === 'open'),
+      ]);
+
+      if (empty($visibility['visible'])) {
+        $r['phone'] = null;
+        $r['whatsapp'] = null;
+      }
+      $r['contact_visibility'] = $visibility;
+      $r['contact_notice'] = $visibility['visible'] ? null : ($visibility['reason'] ?? '');
+      unset($r['owner_contact_privacy']);
       $out[] = $r;
     }
 

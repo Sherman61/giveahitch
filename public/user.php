@@ -208,7 +208,14 @@ function ratingBlock(label, rating){
           <div class="mt-4">
             <h2 class="h6 text-uppercase text-secondary mb-2">Contact</h2>
             <div class="d-grid gap-2">
-              ${contactRows(u.contact)}
+              ${(() => {
+                const visibility = data.user.contact_visibility || {};
+                if (visibility.visible) {
+                  return contactRows(u.contact);
+                }
+                const reason = visibility.reason || 'Contact becomes visible after a ride is accepted.';
+                return `<div class="text-secondary">${escapeHtml(reason)}</div>`;
+              })()}
             </div>
           </div>
         </div>

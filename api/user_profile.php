@@ -5,6 +5,64 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../lib/privacy.php';
+require_once __DIR__ . '/../lib/status.php';
+use function App\Status\{from_db, to_db};
+
+function user_has_active_open_ride(\PDO $pdo, int $userId): bool
+{
+    $sql = "SELECT 1 FROM rides
+            WHERE user_id = :uid
+              AND deleted = 0
+              AND status = :status
+              AND ((ride_end_datetime IS NOT NULL AND ride_end_datetime >= DATE_SUB(NOW(), INTERVAL 6 HOUR))
+                   OR (ride_end_datetime IS NULL AND (ride_datetime IS NULL OR ride_datetime >= DATE_SUB(NOW(), INTERVAL 6 HOUR))))
+            LIMIT 1";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':uid' => $userId,
+        ':status' => to_db('open'),
+    ]);
+    return (bool)$stmt->fetchColumn();
+}
+
+/**
+ * Return the latest qualifying match context between two users.
+ *
+ * @return array{viewer_has_active_match:bool, match_status:?string, match_changed_at:?string}
+ */
+function match_context(\PDO $pdo, int $viewerId, int $targetId): array
+{
+    $statuses = ['accepted', 'matched', 'confirmed', 'in_progress', 'completed', 'cancelled'];
+    $placeholders = implode(',', array_fill(0, count($statuses), '?'));
+    $sql = "SELECT status, updated_at, confirmed_at, created_at
+            FROM ride_matches
+            WHERE ((driver_user_id = ? AND passenger_user_id = ?) OR (driver_user_id = ? AND passenger_user_id = ?))
+              AND status IN ($placeholders)
+            ORDER BY COALESCE(updated_at, confirmed_at, created_at) DESC
+            LIMIT 1";
+
+    $params = [$viewerId, $targetId, $targetId, $viewerId];
+    foreach ($statuses as $status) {
+        $params[] = to_db($status);
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return ['viewer_has_active_match' => false, 'match_status' => null, 'match_changed_at' => null];
+    }
+
+    $status = from_db($row['status'] ?? null);
+    $changedAt = $row['updated_at'] ?? $row['confirmed_at'] ?? $row['created_at'] ?? null;
+
+    return [
+        'viewer_has_active_match' => true,
+        'match_status' => $status,
+        'match_changed_at' => $changedAt,
+    ];
+}
 
 start_secure_session();
 $viewer = \App\Auth\current_user();
@@ -20,7 +78,7 @@ $pdo = db();
 $stmt = $pdo->prepare("SELECT id, display_name, username, email, created_at, score, is_admin,
                                rides_offered_count, rides_requested_count, rides_given_count, rides_received_count,
                                driver_rating_sum, driver_rating_count, passenger_rating_sum, passenger_rating_count,
-                               phone, whatsapp
+                               phone, whatsapp, contact_privacy
                         FROM users WHERE id=:id");
 $stmt->execute([':id' => $uid]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -66,6 +124,31 @@ $stats = [
     'rides_received_count' => (int)$user['rides_received_count'],
 ];
 
+$matchContext = ['viewer_has_active_match' => false, 'match_status' => null, 'match_changed_at' => null];
+$hasMatch = false;
+if ($viewer && (int)$viewer['id'] !== $uid) {
+    $matchContext = match_context($pdo, (int)$viewer['id'], $uid);
+    $hasMatch = $matchContext['viewer_has_active_match'];
+}
+
+$activeRide = user_has_active_open_ride($pdo, $uid);
+
+$visibility = \App\Privacy\evaluate($viewer, [
+    'privacy' => (int)($user['contact_privacy'] ?? 1),
+    'viewer_is_target' => $viewer && (int)$viewer['id'] === $uid,
+    'viewer_is_admin' => $viewer && !empty($viewer['is_admin']),
+    'viewer_logged_in' => (bool)$viewer,
+    'viewer_has_active_match' => $hasMatch,
+    'match_status' => $matchContext['match_status'],
+    'match_changed_at' => $matchContext['match_changed_at'],
+    'target_has_active_open_ride' => $activeRide,
+]);
+
+$contact = [
+    'phone' => $visibility['visible'] ? $user['phone'] : null,
+    'whatsapp' => $visibility['visible'] ? $user['whatsapp'] : null,
+];
+
 $response = [
     'ok' => true,
     'user' => [
@@ -74,10 +157,9 @@ $response = [
         'username' => $user['username'],
         'score' => (int)$user['score'],
         'created_at' => $user['created_at'],
-        'contact' => [
-            'phone' => $user['phone'],
-            'whatsapp' => $user['whatsapp'],
-        ],
+        'contact_privacy' => (int)($user['contact_privacy'] ?? 1),
+        'contact_visibility' => $visibility,
+        'contact' => $contact,
         'stats' => $stats,
         'public_counts' => ['rides_given_count' => $stats['rides_given_count']],
         'driver_rating_avg' => $driverAvg,

@@ -6,12 +6,13 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/status.php';
+require_once __DIR__ . '/../lib/privacy.php';
 
 use function App\Auth\{require_login, current_user};
 use function App\Status\from_db;
 
 start_secure_session();
-require_login();
+$viewerUser = require_login();
 
 $uid  = (int) current_user()['id'];
 $role = $_GET['role'] ?? ''; // '', 'driver', or 'passenger'
@@ -40,10 +41,12 @@ try {
         du.display_name      AS driver_display,
         du.phone             AS driver_phone,
         du.whatsapp          AS driver_whatsapp,
+        du.contact_privacy   AS driver_contact_privacy,
 
         pu.display_name      AS passenger_display,
         pu.phone             AS passenger_phone,
-        pu.whatsapp          AS passenger_whatsapp
+        pu.whatsapp          AS passenger_whatsapp,
+        pu.contact_privacy   AS passenger_contact_privacy
       FROM ride_matches m
       JOIN rides r ON r.id = m.ride_id AND r.deleted = 0
       JOIN users du ON du.id = m.driver_user_id
@@ -100,6 +103,41 @@ try {
         // handy aliases used by your driver UI
         $row['other_display_driver']    = $row['driver_display'];
         $row['other_display_passenger'] = $row['passenger_display'];
+
+        $isDriver = (int)$row['driver_user_id'] === $uid;
+        $otherPrivacy = $isDriver ? (int)($row['passenger_contact_privacy'] ?? 1) : (int)($row['driver_contact_privacy'] ?? 1);
+        $matchChangedAt = $row['updated_at'] ?? $row['confirmed_at'] ?? $row['created_at'] ?? null;
+        $viewerHasMatch = in_array($row['match_status'], ['accepted','matched','confirmed','in_progress','completed','cancelled'], true);
+
+        $visibility = \App\Privacy\evaluate($viewerUser, [
+            'privacy' => $otherPrivacy,
+            'viewer_is_owner' => false,
+            'viewer_is_target' => false,
+            'viewer_is_admin' => !empty($viewerUser['is_admin']),
+            'viewer_logged_in' => true,
+            'viewer_has_active_match' => $viewerHasMatch,
+            'match_status' => $row['match_status'],
+            'match_changed_at' => $matchChangedAt,
+            'target_has_active_open_ride' => false,
+        ]);
+
+        if (empty($visibility['visible'])) {
+            if ($isDriver) {
+                $row['passenger_phone'] = null;
+                $row['passenger_whatsapp'] = null;
+            } else {
+                $row['driver_phone'] = null;
+                $row['driver_whatsapp'] = null;
+            }
+        }
+
+        $row['other_contact_visibility'] = $visibility;
+        $row['other_contact_notice'] = $visibility['visible'] ? null : ($visibility['reason'] ?? '');
+        $row['other_phone'] = $isDriver ? $row['passenger_phone'] : $row['driver_phone'];
+        $row['other_whatsapp'] = $isDriver ? $row['passenger_whatsapp'] : $row['driver_whatsapp'];
+        $row['other_display'] = $isDriver ? $row['passenger_display'] : $row['driver_display'];
+
+        unset($row['driver_contact_privacy'], $row['passenger_contact_privacy']);
     }
     unset($row);
 

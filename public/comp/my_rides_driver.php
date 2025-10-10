@@ -101,6 +101,7 @@ function renderGroup(container, arr, emptyHtml){
   for(const m of arr){
     const dt = m.ride_datetime ? new Date(m.ride_datetime.replace(' ','T')+'Z').toLocaleString() : 'Any time';
     const contact = buildContact(m.other_phone, m.other_whatsapp);
+    const notice = m.other_contact_notice ? `<div class="mt-1 text-secondary small">${esc(m.other_contact_notice)}</div>` : '';
     const card = document.createElement('div');
     card.className = 'card shadow-sm';
     card.innerHTML = `
@@ -109,7 +110,7 @@ function renderGroup(container, arr, emptyHtml){
           <div>
             <div class="fw-semibold">${m.type==='offer'?'🚗 Offer':'🙋 Request'} — ${esc(m.from_text)} → ${esc(m.to_text)}</div>
             <div class="text-muted small">Passenger: ${esc(m.other_display||'')}</div>
-            ${contact ? `<div class="mt-1">${contact}</div>` : ''}
+            ${contact ? `<div class="mt-1">${contact}</div>` : notice}
           </div>
           <div class="text-end">
             ${badge(m.status)}

@@ -133,6 +133,11 @@ const isExpired = (item) => {
 };
 
 const buildContactLinks = (item) => {
+  const visibility = item.contact_visibility || {};
+  if (!visibility.visible) {
+    const message = visibility.reason || 'Contact becomes visible after a ride is accepted.';
+    return `<span class="text-secondary">${escapeHtml(message)}</span>`;
+  }
   const parts = [];
   if (item.phone) {
     parts.push(`<a class="d-inline-flex align-items-center gap-1 text-decoration-none" href="tel:${encodeURIComponent(item.phone)}"><i class="bi bi-telephone-outbound"></i>${escapeHtml(item.phone)}</a>`);
@@ -143,7 +148,7 @@ const buildContactLinks = (item) => {
       parts.push(`<a class="d-inline-flex align-items-center gap-1 text-decoration-none" target="_blank" rel="noopener" href="https://wa.me/${wa}"><i class="bi bi-whatsapp"></i>WhatsApp</a>`);
     }
   }
-  if (!parts.length) return '<span class="text-secondary">Contact shared after acceptance</span>';
+  if (!parts.length) return '<span class="text-secondary">No contact details provided yet.</span>';
   return parts.join('');
 };
 

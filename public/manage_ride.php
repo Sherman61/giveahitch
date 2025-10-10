@@ -110,15 +110,22 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
     }
 
     // Accepted (if any)
-    if (data.accepted) {
-      const a = data.accepted;
+    const activeMatch = data.accepted || data.confirmed;
+    if (activeMatch) {
+      const a = activeMatch;
+      const contactHtml = buildContact(a.other_phone, a.other_whatsapp);
+      const contactNotice = a.other_contact_notice ? `<div class="mt-2 text-secondary small">${esc(a.other_contact_notice)}</div>` : '';
+      const contactBlock = contactHtml
+        ? `<div class="mt-2">${contactHtml}</div>`
+        : contactNotice;
       acceptedWrap.innerHTML = `
         <div class="card shadow-sm">
           <div class="card-body d-flex justify-content-between">
             <div>
               <div class="fw-semibold">Accepted match</div>
               <div class="text-muted small">Other party: ${esc(a.other_display || 'User')}</div>
-              <div class="mt-1">${badge('accepted')}</div>
+              <div class="mt-1">${badge(a.status || 'accepted')}</div>
+              ${contactBlock || ''}
             </div>
             <div class="text-end">
               <span class="badge text-bg-light">${esc(a.ride_datetime || 'Any time')}</span>
@@ -136,13 +143,14 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
 
     for (const p of pend) {
       const contact = buildContact(p.requester_phone, p.requester_whatsapp);
+      const notice = p.requester_contact_notice ? `<div class="mt-1 text-secondary small">${esc(p.requester_contact_notice)}</div>` : '';
       const row = document.createElement('div');
       row.className = 'border rounded p-2 d-flex justify-content-between align-items-center';
       row.innerHTML = `
         <div>
           <div class="fw-semibold">${esc(p.requester_name || 'User')}</div>
           <div class="text-muted small">Requested: ${esc(p.created_at)}</div>
-          ${contact ? `<div class="mt-1">${contact}</div>` : ''}
+          ${contact ? `<div class="mt-1">${contact}</div>` : notice}
         </div>
         <div>
           <button class="btn btn-sm btn-success" data-confirm="${p.match_id}">Confirm</button>
