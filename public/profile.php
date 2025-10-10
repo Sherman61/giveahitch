@@ -65,8 +65,23 @@ $csrf = \App\Auth\csrf_token();
                   <div class="invalid-feedback">Enter a valid WhatsApp number or leave blank.</div>
                   <div class="form-text">Optional but recommended if you prefer messaging.</div>
                 </div>
+                <div class="col-md-6">
+                  <label class="form-label">Contact privacy</label>
+                  <select name="contact_privacy" class="form-select" required>
+                    <option value="1">Share after a ride is accepted (default)</option>
+                    <option value="2">Visible to logged-in members</option>
+                    <option value="3">Public while you have an active ride</option>
+                  </select>
+                  <div class="invalid-feedback">Select how your contact details are shared.</div>
+                  <div class="form-text">Choose when riders can see the phone and WhatsApp numbers saved here.</div>
+                </div>
                 <div class="col-12">
                   <div class="alert alert-info d-none" id="contactPreview"></div>
+                </div>
+                <div class="col-12">
+                  <div class="alert alert-warning small" role="alert">
+                    Email and phone number are always visible to site admins to keep the community safe.
+                  </div>
                 </div>
               </div>
               <div id="profileAlert" class="mt-4"></div>
@@ -150,6 +165,7 @@ $csrf = \App\Auth\csrf_token();
       display_name: form.display_name,
       phone: form.phone,
       whatsapp: form.whatsapp,
+      contact_privacy: form.contact_privacy,
     };
 
     function showAlert(type, message) {
@@ -190,6 +206,7 @@ $csrf = \App\Auth\csrf_token();
         form.display_name.value = user.display_name || '';
         form.phone.value = user.contact?.phone || '';
         form.whatsapp.value = user.contact?.whatsapp || '';
+        form.contact_privacy.value = String(user.contact_privacy ?? 1);
 
         memberSinceEl.textContent = formatDate(user.created_at);
         statOffered.textContent = user.stats?.rides_offered_count ?? 0;
@@ -236,6 +253,7 @@ $csrf = \App\Auth\csrf_token();
         display_name: form.display_name.value.trim(),
         phone: form.phone.value.trim(),
         whatsapp: form.whatsapp.value.trim(),
+        contact_privacy: Number(form.contact_privacy.value || 1),
       };
       try {
         showAlert('info', 'Saving changes…');
@@ -254,6 +272,7 @@ $csrf = \App\Auth\csrf_token();
         form.display_name.value = data.user.display_name || '';
         form.phone.value = data.user.contact?.phone || '';
         form.whatsapp.value = data.user.contact?.whatsapp || '';
+        form.contact_privacy.value = String(data.user.contact_privacy ?? 1);
         loadProfile();
       } catch (err) {
         if (err.fields) {

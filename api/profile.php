@@ -27,6 +27,7 @@ function format_profile(array $row): array {
         'score' => (int)$row['score'],
         'created_at' => $row['created_at'],
         'is_admin' => (bool)$row['is_admin'],
+        'contact_privacy' => (int)($row['contact_privacy'] ?? 1),
         'contact' => [
             'phone' => $row['phone'],
             'whatsapp' => $row['whatsapp'],
@@ -53,7 +54,8 @@ function format_profile(array $row): array {
 function fetch_profile(\PDO $pdo, int $uid): array {
     $stmt = $pdo->prepare('SELECT id,email,display_name,username,phone,whatsapp,score,created_at,is_admin,
                                    rides_offered_count,rides_requested_count,rides_given_count,rides_received_count,
-                                   driver_rating_sum,driver_rating_count,passenger_rating_sum,passenger_rating_count
+                                   driver_rating_sum,driver_rating_count,passenger_rating_sum,passenger_rating_count,
+                                   contact_privacy
                             FROM users WHERE id=:id LIMIT 1');
     $stmt->execute([':id' => $uid]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -73,6 +75,7 @@ if ($method === 'GET') {
 
 if ($method === 'POST' || $method === 'PATCH') {
     $input = assert_csrf_and_get_input();
+    $current = fetch_profile($pdo, $uid);
 
     $display = trim((string)($input['display_name'] ?? ''));
     if ($display === '') {
@@ -86,6 +89,10 @@ if ($method === 'POST' || $method === 'PATCH') {
 
     $phone = trim((string)($input['phone'] ?? ''));
     $whatsapp = trim((string)($input['whatsapp'] ?? ''));
+    $privacy = isset($input['contact_privacy']) ? (int)$input['contact_privacy'] : (int)($current['contact_privacy'] ?? 1);
+    if (!in_array($privacy, [1, 2, 3], true)) {
+        $errors['contact_privacy'] = 'Select a valid privacy option.';
+    }
     $re = '/^\+?[0-9\s\-\(\)]{7,32}$/';
     if ($phone !== '' && !preg_match($re, $phone)) {
         $errors['phone'] = 'Invalid phone number format.';
@@ -103,7 +110,8 @@ if ($method === 'POST' || $method === 'PATCH') {
     $upd = $pdo->prepare('UPDATE users
                            SET display_name=:display,
                                phone=:phone,
-                               whatsapp=:whatsapp
+                               whatsapp=:whatsapp,
+                               contact_privacy=:privacy
                            WHERE id=:id');
     $upd->bindValue(':display', $display, PDO::PARAM_STR);
     if ($phone === '') {
@@ -116,6 +124,7 @@ if ($method === 'POST' || $method === 'PATCH') {
     } else {
         $upd->bindValue(':whatsapp', $whatsapp, PDO::PARAM_STR);
     }
+    $upd->bindValue(':privacy', $privacy, PDO::PARAM_INT);
     $upd->bindValue(':id', $uid, PDO::PARAM_INT);
     $upd->execute();
 

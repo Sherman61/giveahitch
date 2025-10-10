@@ -46,3 +46,14 @@ WHERE existing.id IS NULL;
 DROP TABLE IF EXISTS feedback;
 
 COMMIT;
+
+START TRANSACTION;
+
+-- Add per-user contact privacy setting (1=match only, 2=logged-in, 3=public with active ride).
+ALTER TABLE users
+  ADD COLUMN contact_privacy TINYINT NOT NULL DEFAULT 1 AFTER whatsapp;
+
+-- Ensure existing records default to the strictest option.
+UPDATE users SET contact_privacy = 1 WHERE contact_privacy IS NULL;
+
+COMMIT;

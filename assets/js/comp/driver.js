@@ -105,6 +105,10 @@ function cardForResponded(m, onRefresh){
   // Only show the other party’s contact
   const otherPhone    = amDriver ? m.passenger_phone    : m.driver_phone;
   const otherWhatsApp = amDriver ? m.passenger_whatsapp : m.driver_whatsapp;
+  const contactNotice = m.other_contact_notice || '';
+  const contactBlock = (otherPhone || otherWhatsApp)
+    ? `<div class="mt-2"><strong>Contact:</strong> ${contactHtml(otherPhone, otherWhatsApp)}</div>`
+    : (contactNotice ? `<div class="mt-2 text-secondary small">${esc(contactNotice)}</div>` : '');
 
   const otherName = amDriver ? (m.other_display_passenger || 'your passenger') : (m.other_display_driver || 'your driver');
   const scenario = respondedScenario(m, amDriver, esc(otherName));
@@ -124,7 +128,7 @@ function cardForResponded(m, onRefresh){
           <div class="mt-3">
             <div class="d-flex align-items-center gap-2"><span class="badge text-bg-primary">Driver</span><span>${driverLabel}</span></div>
             <div class="d-flex align-items-center gap-2 mt-1"><span class="badge text-bg-success">Passenger</span><span>${passengerLabel}</span></div>
-            ${ (otherPhone||otherWhatsApp) ? `<div class="mt-2"><strong>Contact:</strong> ${contactHtml(otherPhone, otherWhatsApp)}</div>` : '' }
+            ${contactBlock}
           </div>
         </div>
         <div class="text-end">
