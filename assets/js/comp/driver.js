@@ -11,6 +11,19 @@ const badge = status => {
   return `<span class="badge text-bg-${cls}">${esc(status || 'pending')}</span>`;
 };
 
+const profileLink = (id, name) => {
+  const label = esc(name || (id ? `User #${id}` : 'User'));
+  const userId = Number(id);
+  if (!userId) return label;
+  return `<a class="text-decoration-none" href="/user.php?id=${userId}">${label}</a>`;
+};
+
+const profileLabel = (id, name, isSelf, meName) => {
+  const displayName = isSelf ? (meName || 'You') : (name || (id ? `User #${id}` : 'User'));
+  const linked = profileLink(id, displayName);
+  return isSelf ? `${linked} <span class="text-secondary">(You)</span>` : linked;
+};
+
 function friendlyStatusError(err){
   const code = err?.message || '';
   if (code === 'illegal_transition') {
@@ -99,8 +112,10 @@ function cardForResponded(m, onRefresh){
   const meName = (window.ME_NAME && String(window.ME_NAME).trim()) || 'You';
 
   const amDriver = Number(m.driver_user_id) === meId;
-  const driverLabel    = amDriver ? `${meName} (You)` : esc(m.other_display_driver || 'Driver');
-  const passengerLabel = amDriver ? esc(m.other_display_passenger || 'Passenger') : `${meName} (You)`;
+  const driverIsMe = Number(m.driver_user_id) === meId;
+  const passengerIsMe = Number(m.passenger_user_id) === meId;
+  const driverLabel = profileLabel(m.driver_user_id, m.other_display_driver || 'Driver', driverIsMe, meName);
+  const passengerLabel = profileLabel(m.passenger_user_id, m.other_display_passenger || 'Passenger', passengerIsMe, meName);
 
   // Only show the other party’s contact
   const otherPhone    = amDriver ? m.passenger_phone    : m.driver_phone;
@@ -110,8 +125,12 @@ function cardForResponded(m, onRefresh){
     ? `<div class="mt-2"><strong>Contact:</strong> ${contactHtml(otherPhone, otherWhatsApp)}</div>`
     : (contactNotice ? `<div class="mt-2 text-secondary small">${esc(contactNotice)}</div>` : '');
 
-  const otherName = amDriver ? (m.other_display_passenger || 'your passenger') : (m.other_display_driver || 'your driver');
-  const scenario = respondedScenario(m, amDriver, esc(otherName));
+  const otherId = amDriver ? m.passenger_user_id : m.driver_user_id;
+  const otherDisplay = amDriver
+    ? (m.other_display_passenger || (otherId ? `Passenger #${otherId}` : 'your passenger'))
+    : (m.other_display_driver || (otherId ? `Driver #${otherId}` : 'your driver'));
+  const otherLabel = profileLink(otherId, otherDisplay);
+  const scenario = respondedScenario(m, amDriver, otherLabel);
 
   const card = document.createElement('div');
   card.className = 'card shadow-sm mb-2';
