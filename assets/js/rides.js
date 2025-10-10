@@ -86,7 +86,6 @@ let acceptPromptShownFor = null;
 
 const clearAcceptIntent = () => {
   acceptPromptShownFor = null;
-  clearAcceptQueryParam();
   if (!storage) return;
   try {
     storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
