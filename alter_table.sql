@@ -57,3 +57,47 @@ ALTER TABLE users
 UPDATE users SET contact_privacy = 1 WHERE contact_privacy IS NULL;
 
 COMMIT;
+
+START TRANSACTION;
+
+-- Allow members to control who can direct message them (1=everyone, 2=ride connections, 3=no one).
+ALTER TABLE users
+  ADD COLUMN message_privacy TINYINT NOT NULL DEFAULT 1 AFTER contact_privacy;
+
+UPDATE users SET message_privacy = 1 WHERE message_privacy IS NULL;
+
+-- Conversation metadata between two members (user_a_id < user_b_id enforced in code).
+CREATE TABLE IF NOT EXISTS user_message_threads (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_a_id BIGINT UNSIGNED NOT NULL,
+  user_b_id BIGINT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  last_message_id BIGINT UNSIGNED DEFAULT NULL,
+  last_message_at TIMESTAMP NULL DEFAULT NULL,
+  user_a_unread INT NOT NULL DEFAULT 0,
+  user_b_unread INT NOT NULL DEFAULT 0,
+  UNIQUE KEY uniq_message_pair (user_a_id, user_b_id),
+  KEY idx_thread_last_message (last_message_at),
+  KEY idx_thread_user_a (user_a_id),
+  KEY idx_thread_user_b (user_b_id),
+  CONSTRAINT fk_thread_user_a FOREIGN KEY (user_a_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_thread_user_b FOREIGN KEY (user_b_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Individual direct messages stored per thread.
+CREATE TABLE IF NOT EXISTS user_messages (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  thread_id BIGINT UNSIGNED NOT NULL,
+  sender_user_id BIGINT UNSIGNED NOT NULL,
+  body TEXT NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  read_at TIMESTAMP NULL DEFAULT NULL,
+  KEY idx_message_thread (thread_id),
+  KEY idx_message_sender (sender_user_id),
+  KEY idx_message_created (created_at),
+  CONSTRAINT fk_message_thread FOREIGN KEY (thread_id) REFERENCES user_message_threads(id) ON DELETE CASCADE,
+  CONSTRAINT fk_message_sender FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+COMMIT;

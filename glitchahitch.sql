@@ -199,6 +199,8 @@ CREATE TABLE `users` (
   `username` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `phone` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `whatsapp` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `contact_privacy` tinyint NOT NULL DEFAULT '1',
+  `message_privacy` tinyint NOT NULL DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -206,11 +208,44 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `email`, `password_hash`, `display_name`, `rides_offered_count`, `rides_requested_count`, `rides_given_count`, `rides_received_count`, `score`, `driver_rating_sum`, `driver_rating_count`, `passenger_rating_sum`, `passenger_rating_count`, `is_admin`, `username`, `phone`, `whatsapp`, `created_at`) VALUES
-(1, 'admin@shiyaswebsite.com', '$2y$10$eA3qk4x5v0osTTo9JQz2V.5t2s5sVZb6c8z2b3V4qUO8s2o7m4mIy', 'Site Admin', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, '2025-08-20 15:15:25'),
-(2, 'shermanshiya@gmail.com', '$2y$10$Be4xsnD8R5.DPTtFlNDBi.u81ITZ5PrQLviJfy5p4Sr0dgIN2Ntru', 'shiya s', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, '2025-08-20 18:28:43'),
-(3, 'shermanshiya+1@gmail.com', '$2y$10$kMLK94fg659GpS70vTVljeDQB7FMVlJBlRV0UHxbI6otHZX6HrIZy', 'Shiya Sherman', 1, 0, 0, 2, 200, 0, 0, 5, 1, 0, NULL, '8454133056', '8452441202', '2025-10-06 00:58:44'),
-(4, 'shermanshiya+2@gmail.com', '$2y$10$tOtEXJv/z5JqSlP.VYJBneDQU1roki2Pe02k373H.3sI6K6dEW1ES', 'dev tester', 0, 0, 2, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, '2025-10-06 04:31:37');
+INSERT INTO `users` (`id`, `email`, `password_hash`, `display_name`, `rides_offered_count`, `rides_requested_count`, `rides_given_count`, `rides_received_count`, `score`, `driver_rating_sum`, `driver_rating_count`, `passenger_rating_sum`, `passenger_rating_count`, `is_admin`, `username`, `phone`, `whatsapp`, `contact_privacy`, `message_privacy`, `created_at`) VALUES
+(1, 'admin@shiyaswebsite.com', '$2y$10$eA3qk4x5v0osTTo9JQz2V.5t2s5sVZb6c8z2b3V4qUO8s2o7m4mIy', 'Site Admin', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, 1, 1, '2025-08-20 15:15:25'),
+(2, 'shermanshiya@gmail.com', '$2y$10$Be4xsnD8R5.DPTtFlNDBi.u81ITZ5PrQLviJfy5p4Sr0dgIN2Ntru', 'shiya s', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, 1, 1, '2025-08-20 18:28:43'),
+(3, 'shermanshiya+1@gmail.com', '$2y$10$kMLK94fg659GpS70vTVljeDQB7FMVlJBlRV0UHxbI6otHZX6HrIZy', 'Shiya Sherman', 1, 0, 0, 2, 200, 0, 0, 5, 1, 0, NULL, '8454133056', '8452441202', 1, 1, '2025-10-06 00:58:44'),
+(4, 'shermanshiya+2@gmail.com', '$2y$10$tOtEXJv/z5JqSlP.VYJBneDQU1roki2Pe02k373H.3sI6K6dEW1ES', 'dev tester', 0, 0, 2, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, '2025-10-06 04:31:37');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `user_message_threads`
+--
+
+CREATE TABLE `user_message_threads` (
+  `id` bigint UNSIGNED NOT NULL,
+  `user_a_id` bigint UNSIGNED NOT NULL,
+  `user_b_id` bigint UNSIGNED NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `last_message_id` bigint UNSIGNED DEFAULT NULL,
+  `last_message_at` timestamp NULL DEFAULT NULL,
+  `user_a_unread` int NOT NULL DEFAULT '0',
+  `user_b_unread` int NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `user_messages`
+--
+
+CREATE TABLE `user_messages` (
+  `id` bigint UNSIGNED NOT NULL,
+  `thread_id` bigint UNSIGNED NOT NULL,
+  `sender_user_id` bigint UNSIGNED NOT NULL,
+  `body` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `read_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Indexes for dumped tables
@@ -275,6 +310,25 @@ ALTER TABLE `users`
   ADD UNIQUE KEY `username` (`username`);
 
 --
+-- Indexes for table `user_message_threads`
+--
+ALTER TABLE `user_message_threads`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_message_pair` (`user_a_id`,`user_b_id`),
+  ADD KEY `idx_thread_last_message` (`last_message_at`),
+  ADD KEY `idx_thread_user_a` (`user_a_id`),
+  ADD KEY `idx_thread_user_b` (`user_b_id`);
+
+--
+-- Indexes for table `user_messages`
+--
+ALTER TABLE `user_messages`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_message_thread` (`thread_id`),
+  ADD KEY `idx_message_sender` (`sender_user_id`),
+  ADD KEY `idx_message_created` (`created_at`);
+
+--
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -313,6 +367,18 @@ ALTER TABLE `users`
   MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
+-- AUTO_INCREMENT for table `user_message_threads`
+--
+ALTER TABLE `user_message_threads`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `user_messages`
+--
+ALTER TABLE `user_messages`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
 -- Constraints for dumped tables
 --
 
@@ -336,6 +402,20 @@ ALTER TABLE `ride_ratings`
   ADD CONSTRAINT `fk_rr_match` FOREIGN KEY (`match_id`) REFERENCES `ride_matches` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `fk_rr_rated` FOREIGN KEY (`rated_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
   ADD CONSTRAINT `fk_rr_rater` FOREIGN KEY (`rater_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT;
+
+--
+-- Constraints for table `user_message_threads`
+--
+ALTER TABLE `user_message_threads`
+  ADD CONSTRAINT `fk_thread_user_a` FOREIGN KEY (`user_a_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_thread_user_b` FOREIGN KEY (`user_b_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `user_messages`
+--
+ALTER TABLE `user_messages`
+  ADD CONSTRAINT `fk_message_sender` FOREIGN KEY (`sender_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_message_thread` FOREIGN KEY (`thread_id`) REFERENCES `user_message_threads` (`id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

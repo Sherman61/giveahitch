@@ -3,6 +3,7 @@ import 'dotenv/config';                // loads .env if present
 import express from 'express';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import crypto from 'crypto';
 import process from 'process';
 
 // ---------- Env helpers ----------
@@ -50,8 +51,51 @@ const io = new SocketIOServer(server, {
   allowEIO3: false,
 });
 
+function verifyToken(token) {
+  if (!token || typeof token !== 'string' || !SECRET) return null;
+  let decoded;
+  try {
+    decoded = Buffer.from(token, 'base64').toString('utf8');
+  } catch (err) {
+    return null;
+  }
+  const parts = decoded.split('.');
+  if (parts.length !== 3) return null;
+  const [userIdStr, expiresStr, signature] = parts;
+  const userId = parseInt(userIdStr, 10);
+  const expires = parseInt(expiresStr, 10);
+  if (!Number.isFinite(userId) || userId <= 0 || !Number.isFinite(expires)) return null;
+  if (expires < Math.floor(Date.now() / 1000)) return null;
+
+  const expected = crypto
+    .createHmac('sha256', SECRET)
+    .update(`${userId}.${expires}`)
+    .digest('hex');
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const providedBuf = Buffer.from(signature, 'utf8');
+  if (expectedBuf.length !== providedBuf.length) return null;
+  if (!crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+    return null;
+  }
+  return { userId, expires };
+}
+
 io.on('connection', (socket) => {
   console.log(`[io] connect ${socket.id} origin=${socket.handshake.headers.origin || 'n/a'} ip=${socket.handshake.address || 'n/a'}`);
+
+  socket.on('auth', (payload = {}, ack) => {
+    const respond = typeof ack === 'function' ? ack : () => {};
+    const token = payload.token || payload;
+    const info = verifyToken(token);
+    if (!info) {
+      respond({ ok: false });
+      return;
+    }
+    socket.data.userId = info.userId;
+    socket.join(`user:${info.userId}`);
+    respond({ ok: true, userId: info.userId });
+  });
+
   socket.on('disconnect', (reason) => {
     console.log(`[io] disconnect ${socket.id} (${reason})`);
   });
@@ -73,10 +117,17 @@ hook.post('/broadcast', (req, res) => {
   const key = req.get('X-WS-SECRET') || '';
   if (key !== SECRET) return res.status(403).json({ ok: false, error: 'Forbidden' });
 
-  const { event, payload } = req.body || {};
+  const { event, payload, rooms } = req.body || {};
   if (!event) return res.status(400).json({ ok: false, error: 'Missing event' });
 
-  io.emit(event, payload);
+  if (Array.isArray(rooms) && rooms.length > 0) {
+    rooms
+      .map((room) => (typeof room === 'string' ? room : null))
+      .filter(Boolean)
+      .forEach((room) => io.to(room).emit(event, payload));
+  } else {
+    io.emit(event, payload);
+  }
   res.json({ ok: true });
 });
 

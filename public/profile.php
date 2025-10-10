@@ -75,6 +75,16 @@ $csrf = \App\Auth\csrf_token();
                   <div class="invalid-feedback">Select how your contact details are shared.</div>
                   <div class="form-text">Choose when riders can see the phone and WhatsApp numbers saved here.</div>
                 </div>
+                <div class="col-md-6">
+                  <label class="form-label">Message privacy</label>
+                  <select name="message_privacy" class="form-select" required>
+                    <option value="1">Everyone can message me</option>
+                    <option value="2">Only riders I’ve offered, requested, or completed rides with</option>
+                    <option value="3">No one can start a new chat</option>
+                  </select>
+                  <div class="invalid-feedback">Choose who can send you direct messages.</div>
+                  <div class="form-text">Restrict new conversations to past ride partners or close messaging entirely.</div>
+                </div>
                 <div class="col-12">
                   <div class="alert alert-info d-none" id="contactPreview"></div>
                 </div>
@@ -166,6 +176,7 @@ $csrf = \App\Auth\csrf_token();
       phone: form.phone,
       whatsapp: form.whatsapp,
       contact_privacy: form.contact_privacy,
+      message_privacy: form.message_privacy,
     };
 
     function showAlert(type, message) {
@@ -207,6 +218,7 @@ $csrf = \App\Auth\csrf_token();
         form.phone.value = user.contact?.phone || '';
         form.whatsapp.value = user.contact?.whatsapp || '';
         form.contact_privacy.value = String(user.contact_privacy ?? 1);
+        form.message_privacy.value = String(user.message_privacy ?? 1);
 
         memberSinceEl.textContent = formatDate(user.created_at);
         statOffered.textContent = user.stats?.rides_offered_count ?? 0;
@@ -254,6 +266,7 @@ $csrf = \App\Auth\csrf_token();
         phone: form.phone.value.trim(),
         whatsapp: form.whatsapp.value.trim(),
         contact_privacy: Number(form.contact_privacy.value || 1),
+        message_privacy: Number(form.message_privacy.value || 1),
       };
       try {
         showAlert('info', 'Saving changes…');
@@ -273,6 +286,7 @@ $csrf = \App\Auth\csrf_token();
         form.phone.value = data.user.contact?.phone || '';
         form.whatsapp.value = data.user.contact?.whatsapp || '';
         form.contact_privacy.value = String(data.user.contact_privacy ?? 1);
+        form.message_privacy.value = String(data.user.message_privacy ?? 1);
         loadProfile();
       } catch (err) {
         if (err.fields) {

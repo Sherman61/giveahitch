@@ -128,9 +128,23 @@ function ratingBlock(label, rating){
     const data = await res.json();
     if(!data?.ok){ throw new Error('User not found'); }
     const u = data.user;
+    const messaging = data.messaging || {};
     const initial = (u.display_name || '?').trim().charAt(0)?.toUpperCase() || '?';
     const driverRatingData = data.user?.ratings?.driver ?? { count: u.driver_rating_count, average: u.driver_rating_avg };
     const passengerRatingData = data.user?.ratings?.passenger ?? { count: u.passenger_rating_count, average: u.passenger_rating_avg };
+
+    const chatButton = (!data.is_self && messaging.allowed)
+      ? `<a class="btn btn-primary btn-sm mt-2 mt-lg-0 ms-lg-2" href="/messages.php?user_id=${u.id}"><i class="bi bi-chat-dots me-1"></i>Message</a>`
+      : (!data.is_self && messaging.reason)
+        ? `<button type="button" class="btn btn-outline-secondary btn-sm mt-2 mt-lg-0 ms-lg-2" disabled title="${escapeHtml(messaging.reason)}"><i class="bi bi-chat-dots me-1"></i>Message</button>`
+        : '';
+    const chatNote = (!data.is_self && !messaging.allowed && messaging.reason)
+      ? `<div class="text-secondary small mt-2">${escapeHtml(messaging.reason)}</div>`
+      : '';
+
+    const chatBlock = (!data.is_self && (chatButton || chatNote))
+      ? `<div class="mt-2 d-flex flex-column align-items-lg-end align-items-start">${chatButton}${chatNote}</div>`
+      : '';
 
     profileRoot.innerHTML = `
       <div class="card shadow-sm profile-card">
@@ -151,6 +165,7 @@ function ratingBlock(label, rating){
             <div class="text-lg-end w-100 w-lg-auto">
               <span class="badge text-bg-primary fs-6">Score ${u.score}</span>
               ${data.is_self ? `<div class="mt-2"><a class="btn btn-outline-primary btn-sm" href="/profile.php"><i class="bi bi-gear me-1"></i>Edit profile</a></div>` : ''}
+              ${chatBlock}
             </div>
           </div>
           <div class="row g-3 mt-4">

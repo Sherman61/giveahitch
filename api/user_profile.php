@@ -6,6 +6,7 @@ require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/privacy.php';
+require_once __DIR__ . '/../lib/message_privacy.php';
 require_once __DIR__ . '/../lib/status.php';
 use function App\Status\{from_db, to_db};
 
@@ -78,7 +79,7 @@ $pdo = db();
 $stmt = $pdo->prepare("SELECT id, display_name, username, email, created_at, score, is_admin,
                                rides_offered_count, rides_requested_count, rides_given_count, rides_received_count,
                                driver_rating_sum, driver_rating_count, passenger_rating_sum, passenger_rating_count,
-                               phone, whatsapp, contact_privacy
+                               phone, whatsapp, contact_privacy, message_privacy
                         FROM users WHERE id=:id");
 $stmt->execute([':id' => $uid]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -149,6 +150,8 @@ $contact = [
     'whatsapp' => $visibility['visible'] ? $user['whatsapp'] : null,
 ];
 
+$messaging = \App\MessagePrivacy\can_message($pdo, $viewer, $user);
+
 $response = [
     'ok' => true,
     'user' => [
@@ -158,6 +161,7 @@ $response = [
         'score' => (int)$user['score'],
         'created_at' => $user['created_at'],
         'contact_privacy' => (int)($user['contact_privacy'] ?? 1),
+        'message_privacy' => (int)($user['message_privacy'] ?? 1),
         'contact_visibility' => $visibility,
         'contact' => $contact,
         'stats' => $stats,
@@ -193,6 +197,12 @@ $response = [
         ];
     }, $feedback),
     'is_self' => $viewer && (int)$viewer['id'] === (int)$user['id'],
+    'messaging' => [
+        'allowed' => (bool)($messaging['allowed'] ?? false),
+        'reason' => (string)($messaging['reason'] ?? ''),
+        'level' => (int)($messaging['level'] ?? 1),
+        'has_relationship' => (bool)($messaging['has_relationship'] ?? false),
+    ],
 ];
 
 echo json_encode($response, JSON_UNESCAPED_UNICODE);

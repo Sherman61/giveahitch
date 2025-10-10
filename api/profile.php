@@ -28,6 +28,7 @@ function format_profile(array $row): array {
         'created_at' => $row['created_at'],
         'is_admin' => (bool)$row['is_admin'],
         'contact_privacy' => (int)($row['contact_privacy'] ?? 1),
+        'message_privacy' => (int)($row['message_privacy'] ?? 1),
         'contact' => [
             'phone' => $row['phone'],
             'whatsapp' => $row['whatsapp'],
@@ -55,7 +56,8 @@ function fetch_profile(\PDO $pdo, int $uid): array {
     $stmt = $pdo->prepare('SELECT id,email,display_name,username,phone,whatsapp,score,created_at,is_admin,
                                    rides_offered_count,rides_requested_count,rides_given_count,rides_received_count,
                                    driver_rating_sum,driver_rating_count,passenger_rating_sum,passenger_rating_count,
-                                   contact_privacy
+                                   contact_privacy,
+                                   message_privacy
                             FROM users WHERE id=:id LIMIT 1');
     $stmt->execute([':id' => $uid]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -93,6 +95,10 @@ if ($method === 'POST' || $method === 'PATCH') {
     if (!in_array($privacy, [1, 2, 3], true)) {
         $errors['contact_privacy'] = 'Select a valid privacy option.';
     }
+    $messagePrivacy = isset($input['message_privacy']) ? (int)$input['message_privacy'] : (int)($current['message_privacy'] ?? 1);
+    if (!in_array($messagePrivacy, [1, 2, 3], true)) {
+        $errors['message_privacy'] = 'Select who can message you.';
+    }
     $re = '/^\+?[0-9\s\-\(\)]{7,32}$/';
     if ($phone !== '' && !preg_match($re, $phone)) {
         $errors['phone'] = 'Invalid phone number format.';
@@ -111,7 +117,8 @@ if ($method === 'POST' || $method === 'PATCH') {
                            SET display_name=:display,
                                phone=:phone,
                                whatsapp=:whatsapp,
-                               contact_privacy=:privacy
+                               contact_privacy=:privacy,
+                               message_privacy=:msg_privacy
                            WHERE id=:id');
     $upd->bindValue(':display', $display, PDO::PARAM_STR);
     if ($phone === '') {
@@ -125,6 +132,7 @@ if ($method === 'POST' || $method === 'PATCH') {
         $upd->bindValue(':whatsapp', $whatsapp, PDO::PARAM_STR);
     }
     $upd->bindValue(':privacy', $privacy, PDO::PARAM_INT);
+    $upd->bindValue(':msg_privacy', $messagePrivacy, PDO::PARAM_INT);
     $upd->bindValue(':id', $uid, PDO::PARAM_INT);
     $upd->execute();
 
