@@ -67,7 +67,10 @@ const rememberAcceptIntent = (rideId) => {
   }
 };
 
+let acceptPromptShownFor = null;
+
 const clearAcceptIntent = () => {
+  acceptPromptShownFor = null;
   if (!storage) return;
   try {
     storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
@@ -413,6 +416,9 @@ const maybePromptPendingAccept = () => {
     pendingAcceptIntent = null;
     return;
   }
+
+  if (acceptPromptShownFor === rideId) return;
+  acceptPromptShownFor = rideId;
 
   const message = `You wanted to accept the ride from ${ride.from_text} to ${ride.to_text}. Accept it now?`;
   if (confirm(message)) {

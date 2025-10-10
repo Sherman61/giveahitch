@@ -59,6 +59,12 @@ const API_BASE = '/api';
 const CSRF = <?= json_encode($csrf) ?>;
 
 function esc(s){return s?String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])):'';}
+function profileLink(id, name){
+  const label = esc(name || 'User');
+  const userId = Number(id);
+  if (!userId) return label;
+  return `<a class="text-decoration-none" href="/user.php?id=${userId}">${label}</a>`;
+}
 function badge(status){
   const map = {open:'secondary',pending:'warning',matched:'primary',in_progress:'info',completed:'success',cancelled:'dark',rejected:'dark'};
   const cls = map[status] || 'light';
@@ -160,7 +166,7 @@ async function openManageModal(rideId){
     row.className = 'd-flex justify-content-between align-items-center border rounded p-2 mb-2';
     row.innerHTML = `
       <div>
-        <div class="fw-semibold"><i class="bi bi-person-check me-1"></i>${esc(p.requester_name)}</div>
+        <div class="fw-semibold"><i class="bi bi-person-check me-1"></i>${profileLink(p.requester_id, p.requester_name)}</div>
         <div class="text-muted small">Requested at ${new Date(p.created_at.replace(' ','T')+'Z').toLocaleString()}</div>
       </div>
       <div>

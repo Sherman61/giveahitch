@@ -11,6 +11,13 @@ const badge = status => {
   return `<span class="badge badge-status text-bg-${cls}">${esc(status||'open')}</span>`;
 };
 
+const profileLink = (id, name) => {
+  const label = esc(name || (id ? `User #${id}` : 'User'));
+  const userId = Number(id);
+  if (!userId) return label;
+  return `<a class="text-decoration-none" href="/user.php?id=${userId}">${label}</a>`;
+};
+
 function friendlyStatusError(err){
   const code = err?.message || '';
   if (code === 'illegal_transition') {
@@ -76,12 +83,18 @@ function scenarioSummary(item){
   const status = item.status;
   const confirmed = item.confirmed;
   const manageUrl = `/manage_ride.php?id=${item.id}`;
-  const otherDisplay = confirmed
-    ? (type === 'offer'
-        ? (confirmed.passenger_display || `Passenger #${confirmed.passenger_user_id}`)
-        : (confirmed.driver_display || `Driver #${confirmed.driver_user_id}`))
-    : '';
-  const otherName = esc(otherDisplay || 'your match');
+  let otherLabel = esc('your match');
+  if (confirmed) {
+    if (type === 'offer') {
+      const otherId = confirmed.passenger_user_id;
+      const name = confirmed.passenger_display || (otherId ? `Passenger #${otherId}` : 'Passenger');
+      otherLabel = profileLink(otherId, name);
+    } else {
+      const otherId = confirmed.driver_user_id;
+      const name = confirmed.driver_display || (otherId ? `Driver #${otherId}` : 'Driver');
+      otherLabel = profileLink(otherId, name);
+    }
+  }
 
   let heading = type === 'offer' ? 'You offered a ride' : 'You requested a ride';
   let detail = '';
@@ -106,8 +119,8 @@ function scenarioSummary(item){
   } else if (status === 'matched' || status === 'confirmed') {
     if (confirmed) {
       detail = type === 'offer'
-        ? `You're matched with ${otherName}. Coordinate pickup and start the trip when you're ready.`
-        : `Driver ${otherName} accepted your request. Confirm plans before you meet up.`;
+        ? `You're matched with ${otherLabel}. Coordinate pickup and start the trip when you're ready.`
+        : `Driver ${otherLabel} accepted your request. Confirm plans before you meet up.`;
     } else {
       detail = 'You have an active match awaiting confirmation.';
     }
@@ -117,12 +130,12 @@ function scenarioSummary(item){
     cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Manage ride</a>`;
   } else if (status === 'in_progress') {
     detail = confirmed
-      ? `You're on the road with ${otherName}.`
+      ? `You're on the road with ${otherLabel}.`
       : 'This ride is marked as in progress.';
     cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Update status</a>`;
   } else if (status === 'completed') {
     detail = confirmed
-      ? `You completed this trip with ${otherName}.`
+      ? `You completed this trip with ${otherLabel}.`
       : 'This ride is completed.';
     if (!item.already_rated) {
       detail += ' Please rate the other rider to wrap things up.';
@@ -226,10 +239,12 @@ function renderCard(item, el){
   let rolesHtml = '';
   if (item.confirmed){
     const d = item.confirmed;
+    const driverName = d.driver_display || (d.driver_user_id ? `User #${d.driver_user_id}` : 'Driver');
+    const passengerName = d.passenger_display || (d.passenger_user_id ? `User #${d.passenger_user_id}` : 'Passenger');
     rolesHtml = `
         <div class="mt-2">
-          <div class="d-flex align-items-center gap-2"><span class="badge text-bg-primary">Driver</span><span>${esc(d.driver_display||('User #'+d.driver_user_id))}</span></div>
-          <div class="d-flex align-items-center gap-2 mt-1"><span class="badge text-bg-success">Passenger</span><span>${esc(d.passenger_display||('User #'+d.passenger_user_id))}</span></div>
+          <div class="d-flex align-items-center gap-2"><span class="badge text-bg-primary">Driver</span><span>${profileLink(d.driver_user_id, driverName)}</span></div>
+          <div class="d-flex align-items-center gap-2 mt-1"><span class="badge text-bg-success">Passenger</span><span>${profileLink(d.passenger_user_id, passengerName)}</span></div>
           <div class="mt-1"><strong>Contact:</strong> ${contactHtml(d.driver_phone||'', d.driver_whatsapp||'')} ${contactHtml(d.passenger_phone||'', d.passenger_whatsapp||'')}</div>
         </div>`;
   }
