@@ -37,12 +37,25 @@ $passengerAvg = ($user['passenger_rating_count'] ?? 0) > 0
     ? round((float)$user['passenger_rating_sum'] / (int)$user['passenger_rating_count'], 2)
     : null;
 
-$fb = $pdo->prepare("SELECT f.id, f.rating, f.comment, f.role, f.created_at,
-                            rater.display_name AS rater_name
-                     FROM feedback f
-                     JOIN users rater ON rater.id = f.rater_user_id
-                     WHERE f.ratee_user_id = :id
-                     ORDER BY f.id DESC LIMIT 50");
+$fb = $pdo->prepare("SELECT
+                            rr.id,
+                            rr.stars AS rating,
+                            rr.comment,
+                            rr.rated_role AS role,
+                            rr.created_at,
+                            rr.match_id,
+                            rr.rater_role,
+                            rater.display_name AS rater_name,
+                            rides.type         AS ride_type,
+                            rides.from_text,
+                            rides.to_text
+                     FROM ride_ratings rr
+                     JOIN users rater    ON rater.id    = rr.rater_user_id
+                     JOIN ride_matches m ON m.id        = rr.match_id
+                     JOIN rides          ON rides.id    = m.ride_id
+                     WHERE rr.rated_user_id = :id
+                     ORDER BY rr.created_at DESC
+                     LIMIT 50");
 $fb->execute([':id' => $uid]);
 $feedback = $fb->fetchAll(PDO::FETCH_ASSOC);
 
@@ -71,8 +84,32 @@ $response = [
         'driver_rating_count' => (int)$user['driver_rating_count'],
         'passenger_rating_avg' => $passengerAvg,
         'passenger_rating_count' => (int)$user['passenger_rating_count'],
+        'ratings' => [
+            'driver' => [
+                'count'   => (int)$user['driver_rating_count'],
+                'average' => $driverAvg,
+            ],
+            'passenger' => [
+                'count'   => (int)$user['passenger_rating_count'],
+                'average' => $passengerAvg,
+            ],
+        ],
     ],
-    'feedback' => $feedback,
+    'feedback' => array_map(static function(array $row): array {
+        return [
+            'id'          => (int)$row['id'],
+            'rating'      => (int)$row['rating'],
+            'comment'     => $row['comment'],
+            'role'        => $row['role'],
+            'rater_role'  => $row['rater_role'],
+            'match_id'    => (int)$row['match_id'],
+            'ride_type'   => $row['ride_type'],
+            'from_text'   => $row['from_text'],
+            'to_text'     => $row['to_text'],
+            'rater_name'  => $row['rater_name'],
+            'created_at'  => $row['created_at'],
+        ];
+    }, $feedback),
     'is_self' => $viewer && (int)$viewer['id'] === (int)$user['id'],
 ];
 

@@ -44,25 +44,6 @@ CREATE TABLE `app_errors` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `feedback`
---
-
-CREATE TABLE `feedback` (
-  `id` bigint UNSIGNED NOT NULL,
-  `ride_match_id` bigint UNSIGNED NOT NULL,
-  `rater_user_id` bigint UNSIGNED NOT NULL,
-  `ratee_user_id` bigint UNSIGNED NOT NULL,
-  `role` enum('driver','passenger') NOT NULL,
-  `rating` tinyint UNSIGNED NOT NULL,
-  `comment` text,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `rate_limits`
---
 
 CREATE TABLE `rate_limits` (
   `id` bigint UNSIGNED NOT NULL,
@@ -180,7 +161,8 @@ CREATE TABLE `ride_ratings` (
   `match_id` bigint UNSIGNED NOT NULL,
   `rater_user_id` bigint UNSIGNED NOT NULL,
   `rated_user_id` bigint UNSIGNED NOT NULL,
-  `role` enum('driver','passenger') NOT NULL,
+  `rater_role` enum('driver','passenger') NOT NULL,
+  `rated_role` enum('driver','passenger') NOT NULL,
   `stars` tinyint UNSIGNED NOT NULL,
   `comment` varchar(1000) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -190,8 +172,8 @@ CREATE TABLE `ride_ratings` (
 -- Dumping data for table `ride_ratings`
 --
 
-INSERT INTO `ride_ratings` (`id`, `ride_id`, `match_id`, `rater_user_id`, `rated_user_id`, `role`, `stars`, `comment`, `created_at`) VALUES
-(1, 15, 13, 4, 3, 'passenger', 5, NULL, '2025-10-09 10:37:09');
+INSERT INTO `ride_ratings` (`id`, `ride_id`, `match_id`, `rater_user_id`, `rated_user_id`, `rater_role`, `rated_role`, `stars`, `comment`, `created_at`) VALUES
+(1, 15, 13, 4, 3, 'passenger', 'driver', 5, NULL, '2025-10-09 10:37:09');
 
 -- --------------------------------------------------------
 
@@ -243,18 +225,6 @@ ALTER TABLE `app_errors`
   ADD KEY `idx_created` (`created_at`),
   ADD KEY `idx_user` (`user_id`);
 
---
--- Indexes for table `feedback`
---
-ALTER TABLE `feedback`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uq_feedback_one_per_rater` (`ride_match_id`,`rater_user_id`),
-  ADD KEY `fk_fb_rm` (`ride_match_id`),
-  ADD KEY `idx_fb_ratee` (`ratee_user_id`),
-  ADD KEY `fk_fb_rater` (`rater_user_id`);
-
---
--- Indexes for table `rate_limits`
 --
 ALTER TABLE `rate_limits`
   ADD PRIMARY KEY (`id`),
@@ -315,14 +285,6 @@ ALTER TABLE `app_errors`
   MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT for table `feedback`
---
-ALTER TABLE `feedback`
-  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `rate_limits`
---
 ALTER TABLE `rate_limits`
   MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
@@ -354,16 +316,6 @@ ALTER TABLE `users`
 -- Constraints for dumped tables
 --
 
---
--- Constraints for table `feedback`
---
-ALTER TABLE `feedback`
-  ADD CONSTRAINT `fk_fb_ratee` FOREIGN KEY (`ratee_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
-  ADD CONSTRAINT `fk_fb_rater` FOREIGN KEY (`rater_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
-  ADD CONSTRAINT `fk_fb_rm` FOREIGN KEY (`ride_match_id`) REFERENCES `ride_matches` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `rides`
 --
 ALTER TABLE `rides`
   ADD CONSTRAINT `fk_rides_confirmed_match` FOREIGN KEY (`confirmed_match_id`) REFERENCES `ride_matches` (`id`) ON DELETE SET NULL,

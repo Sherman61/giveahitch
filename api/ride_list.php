@@ -82,6 +82,24 @@ try {
 
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    $rideIds = array_map('intval', array_column($rows, 'id'));
+    $matchCounts = [];
+    if ($rideIds) {
+      $ph = implode(',', array_fill(0, count($rideIds), '?'));
+      $countSql = "
+        SELECT ride_id, status, COUNT(*) AS total
+        FROM ride_matches
+        WHERE ride_id IN ($ph)
+        GROUP BY ride_id, status";
+      $countStmt = $pdo->prepare($countSql);
+      $countStmt->execute($rideIds);
+      while ($row = $countStmt->fetch(PDO::FETCH_ASSOC)) {
+        $rid    = (int)$row['ride_id'];
+        $status = from_db($row['status']);
+        $matchCounts[$rid][$status] = (int)$row['total'];
+      }
+    }
+
     // Attach `confirmed` block per ride (if any match is accepted/in_progress/completed)
     $out = [];
     $matchSql = "
@@ -127,6 +145,9 @@ try {
       }
       $r['confirmed']      = $confirmed;
       $r['already_rated']  = false; // default; updated below if the current user has rated this match
+      $r['match_counts']   = $matchCounts[(int)$r['id']] ?? [];
+      $r['owner_role']     = $r['type'] === 'offer' ? 'driver' : 'passenger';
+      $r['other_role']     = $r['owner_role'] === 'driver' ? 'passenger' : 'driver';
       $out[] = $r;
     }
 

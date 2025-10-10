@@ -5,8 +5,10 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/status.php';
 
 use function App\Auth\{require_login, current_user};
+use function App\Status\from_db;
 
 start_secure_session();
 require_login();
@@ -35,10 +37,11 @@ try {
   if (!$isDriver && !$isPassenger) { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'forbidden']); exit; }
 
   // Only after completion
-  $canRate = ($m['status'] === 'completed');
+  $matchStatus = from_db($m['status']);
+  $canRate = ($matchStatus === 'completed');
 
   // Did I already rate?
-  $rq = $pdo->prepare("SELECT stars, note, created_at FROM ride_ratings WHERE match_id=:mid AND rater_user_id=:u LIMIT 1");
+  $rq = $pdo->prepare("SELECT stars, comment, created_at FROM ride_ratings WHERE match_id=:mid AND rater_user_id=:u LIMIT 1");
   $rq->execute([':mid'=>$matchId, ':u'=>$uid]);
   $existing = $rq->fetch(PDO::FETCH_ASSOC) ?: null;
 
@@ -51,10 +54,14 @@ try {
     'ok'=>true,
     'can_rate'=> $canRate && !$existing,
     'already_rated'=> (bool)$existing,
-    'existing'=> $existing,
+    'existing'=> $existing ? [
+      'stars'      => (int)$existing['stars'],
+      'comment'    => $existing['comment'],
+      'created_at' => $existing['created_at'],
+    ] : null,
     'target_role'=> $targetRole,
     'target_user'=> $targetUser,
-    'match_status'=> $m['status'],
+    'match_status'=> $matchStatus,
   ]);
 } catch (Throwable $e) {
   http_response_code(500);

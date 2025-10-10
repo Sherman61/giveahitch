@@ -32,11 +32,14 @@ $uid = (int)($_GET['id'] ?? 0);
   <div class="card shadow-sm">
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h5 mb-0">Community feedback</h2>
+        <div>
+          <h2 class="h5 mb-0">Ratings &amp; comments from riders</h2>
+          <p class="text-secondary small mb-0">Star ratings capture the overall ride experience. Comments are optional notes riders left alongside their rating.</p>
+        </div>
         <a class="btn btn-sm btn-outline-secondary" href="/rides.php"><i class="bi bi-arrow-left"></i> Back to rides</a>
       </div>
       <div id="fb" class="vstack gap-3"></div>
-      <div id="fbEmpty" class="text-center text-secondary py-4 d-none">No feedback yet.</div>
+      <div id="fbEmpty" class="text-center text-secondary py-4 d-none">No one has rated this rider yet.</div>
     </div>
   </div>
 </div>
@@ -93,6 +96,15 @@ function starDisplay(avg){
          `</div>`;
 }
 
+function starsOnly(value){
+  const rating = Math.max(0, Math.min(5, Number(value) || 0));
+  const icons = [];
+  for(let i=1;i<=5;i++){
+    icons.push(`<i class="bi ${i <= rating ? 'bi-star-fill' : 'bi-star'}"></i>`);
+  }
+  return `<div class="text-warning fs-5">${icons.join('')}</div>`;
+}
+
 function ratingBlock(label, rating){
   if((rating?.count ?? 0) > 0){
     const avg = rating.average != null ? Number(rating.average) : null;
@@ -142,34 +154,56 @@ function ratingBlock(label, rating){
             </div>
           </div>
           <div class="row g-3 mt-4">
-            <div class="col-sm-6 col-lg-3">
-              <div class="stat-pill h-100">
-                <div class="text-uppercase small">Rides offered</div>
-                <div class="value">${u.stats.rides_offered_count}</div>
-              </div>
+            <div class="col-lg-7">
+              <section class="border rounded-3 p-3 h-100 bg-body-tertiary">
+                <h2 class="h6 text-uppercase text-secondary mb-3">Ride activity</h2>
+                <div class="row g-3">
+                  <div class="col-sm-6">
+                    <div class="stat-pill h-100">
+                      <div class="text-uppercase small">Rides offered</div>
+                      <div class="value">${u.stats.rides_offered_count}</div>
+                    </div>
+                  </div>
+                  <div class="col-sm-6">
+                    <div class="stat-pill h-100">
+                      <div class="text-uppercase small">Rides requested</div>
+                      <div class="value">${u.stats.rides_requested_count}</div>
+                    </div>
+                  </div>
+                  <div class="col-sm-6">
+                    <div class="stat-pill h-100">
+                      <div class="text-uppercase small">Rides given</div>
+                      <div class="value">${u.stats.rides_given_count}</div>
+                    </div>
+                  </div>
+                  <div class="col-sm-6">
+                    <div class="stat-pill h-100">
+                      <div class="text-uppercase small">Rides received</div>
+                      <div class="value">${u.stats.rides_received_count}</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-3 small text-secondary">
+                  <strong>How to read these:</strong>
+                  <ul class="ps-3 mb-0">
+                    <li><strong>Rides offered</strong> — trips you posted as a driver.</li>
+                    <li><strong>Rides requested</strong> — trips you asked others to drive.</li>
+                    <li><strong>Rides given</strong> — completed trips where you drove someone.</li>
+                    <li><strong>Rides received</strong> — completed trips where another driver gave you a lift.</li>
+                  </ul>
+                </div>
+              </section>
             </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="stat-pill h-100">
-                <div class="text-uppercase small">Rides requested</div>
-                <div class="value">${u.stats.rides_requested_count}</div>
-              </div>
+            <div class="col-lg-5">
+              <section class="border rounded-3 p-3 h-100">
+                <h2 class="h6 text-uppercase text-secondary mb-3">Ratings overview</h2>
+                <div class="d-grid gap-3">
+                  ${ratingBlock('As a driver', driverRatingData)}
+                  ${ratingBlock('As a passenger', passengerRatingData)}
+                </div>
+                <p class="small text-secondary mb-0 mt-3">Ratings are 1–5 stars summarising the ride. Riders can also leave an optional written comment for extra context.</p>
+              </section>
             </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="stat-pill h-100">
-                <div class="text-uppercase small">Rides given</div>
-                <div class="value">${u.stats.rides_given_count}</div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="stat-pill h-100">
-                <div class="text-uppercase small">Rides received</div>
-                <div class="value">${u.stats.rides_received_count}</div>
-              </div>
-            </div>
-          </div>
-          <div class="row g-3 mt-4">
-            <div class="col-md-6">${ratingBlock('Driver rating', driverRatingData)}</div>
-            <div class="col-md-6">${ratingBlock('Passenger rating', passengerRatingData)}</div>
           </div>
           <div class="mt-4">
             <h2 class="h6 text-uppercase text-secondary mb-2">Contact</h2>
@@ -187,16 +221,33 @@ function ratingBlock(label, rating){
       data.feedback.forEach((f)=>{
         const card = document.createElement('div');
         card.className = 'feedback-card p-3';
-        const date = new Date(f.created_at.replace(' ','T'));
-        const when = Number.isNaN(date.getTime()) ? f.created_at : date.toLocaleString();
+        const date = new Date((f.created_at || '').replace(' ','T'));
+        const when = Number.isNaN(date.getTime()) ? escapeHtml(f.created_at || '') : date.toLocaleString();
+        const roleLabel = f.role === 'driver' ? 'You drove' : 'You rode';
+        const raterRoleLabel = f.rater_role === 'driver' ? 'driver' : 'passenger';
+        const tripLabel = (f.from_text || f.to_text)
+          ? `${escapeHtml(f.from_text ?? '')} → ${escapeHtml(f.to_text ?? '')}`
+          : '';
+        const summaryLine = f.role === 'driver'
+          ? `${escapeHtml(f.rater_name)} rode with you as the passenger and rated your driving.`
+          : `${escapeHtml(f.rater_name)} drove this trip and rated you as their passenger.`;
+        const commentHtml = f.comment
+          ? `<div class="mt-2">${escapeHtml(f.comment)}</div>`
+          : '<div class="mt-2 text-secondary fst-italic">No written comment.</div>';
+
         card.innerHTML = `
-          <div class="d-flex justify-content-between align-items-start">
-            <div>
-              <div><strong>${escapeHtml(f.rater_name)}</strong> rated <span class="text-lowercase">${escapeHtml(f.role)}</span></div>
-              ${f.comment ? `<div class="text-secondary mt-1">${escapeHtml(f.comment)}</div>` : ''}
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
+            <div class="flex-grow-1">
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                <span class="badge text-bg-primary">${roleLabel}</span>
+                ${tripLabel ? `<span class="text-secondary small">${tripLabel}</span>` : ''}
+              </div>
+              <div class="text-secondary small">${summaryLine} They left this feedback while riding as the ${escapeHtml(raterRoleLabel)}.</div>
+              ${commentHtml}
             </div>
-            <div class="text-end">
-              <div class="badge text-bg-warning text-dark">${f.rating}/5</div>
+            <div class="text-end" style="min-width:110px;">
+              ${starsOnly(f.rating)}
+              <div class="fw-semibold">${f.rating}/5</div>
               <div class="small text-muted">${when}</div>
             </div>
           </div>`;

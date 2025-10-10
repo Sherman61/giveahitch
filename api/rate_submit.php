@@ -63,11 +63,12 @@ try {
     throw new RuntimeException('forbidden'); // 403
   }
 
-  // 2) Determine who is being rated and what "role" field is.
-  // If the rater is the passenger, they rate the driver (role='passenger').
-  // If the rater is the driver, they rate the passenger (role='driver').
-  $role        = ($uid === $driverId) ? 'driver' : 'passenger';
+  // 2) Determine the perspective of the rater and the role of the person being rated.
+  // If the rater is the passenger, they rate the driver (rated_role='driver').
+  // If the rater is the driver, they rate the passenger (rated_role='passenger').
+  $raterRole   = ($uid === $driverId) ? 'driver' : 'passenger';
   $ratedUserId = ($uid === $driverId) ? $passengerId : $driverId;
+  $ratedRole   = ($raterRole === 'driver') ? 'passenger' : 'driver';
 
   // 3) Prevent duplicate rating by same rater for this match.
   // Table has UNIQUE (match_id, rater_user_id) – this query lets us return a friendly error.
@@ -79,21 +80,22 @@ try {
 
   // 4) Insert rating row.
   $ins = $pdo->prepare("
-    INSERT INTO ride_ratings (ride_id, match_id, rater_user_id, rated_user_id, role, stars, comment)
-    VALUES (:rid, :mid, :rater, :rated, :role, :stars, :comment)
+    INSERT INTO ride_ratings (ride_id, match_id, rater_user_id, rated_user_id, rater_role, rated_role, stars, comment)
+    VALUES (:rid, :mid, :rater, :rated, :rater_role, :rated_role, :stars, :comment)
   ");
   $ins->execute([
     ':rid'    => $rideId,
     ':mid'    => $matchId,
     ':rater'  => $uid,
     ':rated'  => $ratedUserId,
-    ':role'   => $role,        // 'driver' | 'passenger' (role of the RATER)
+    ':rater_role' => $raterRole,
+    ':rated_role' => $ratedRole,
     ':stars'  => $stars,
     ':comment'=> ($comment !== '' ? $comment : null),
   ]);
 
   // 5) Update aggregates for the RATED user.
-  if ($role === 'passenger') {
+  if ($raterRole === 'passenger') {
     // passenger rated the driver → bump driver's driver_* stats
     $upd = $pdo->prepare("
       UPDATE users
