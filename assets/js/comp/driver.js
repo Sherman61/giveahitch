@@ -38,6 +38,45 @@ const contactHtml = (phone, whatsapp) => {
   return parts.join(' ');
 };
 
+function respondedScenario(m, amDriver, otherName){
+  const status = m.match_status;
+  let heading = amDriver ? 'You offered to drive' : 'You asked for a ride';
+  let detail = '';
+  let cta = '';
+
+  if (status === 'pending') {
+    detail = amDriver
+      ? `${otherName} still needs to accept your offer.`
+      : `${otherName} is reviewing your request.`;
+    cta = 'You can withdraw if your plans changed.';
+  } else if (status === 'accepted') {
+    detail = amDriver
+      ? `${otherName} accepted your offer. The ride owner will confirm once everything is set.`
+      : `You're accepted by ${otherName}. Watch for confirmation from the ride owner.`;
+  } else if (status === 'matched' || status === 'confirmed') {
+    detail = amDriver
+      ? `You're confirmed to drive ${otherName}. Coordinate timing and start the trip together.`
+      : `${otherName} is confirmed to drive you. Coordinate meetup details before departure.`;
+    cta = 'Mark the ride complete once the trip wraps up.';
+  } else if (status === 'in_progress') {
+    detail = amDriver
+      ? `You're currently driving ${otherName}.`
+      : `${otherName} is currently driving you.`;
+    cta = 'Complete the ride when the trip ends.';
+  } else if (status === 'completed') {
+    detail = amDriver
+      ? `Trip finished with ${otherName}.`
+      : `Trip finished with ${otherName}.`;
+    cta = m.already_rated ? 'Thanks for sharing your rating.' : 'Remember to leave a rating.';
+  } else if (status === 'rejected' || status === 'cancelled') {
+    detail = 'This match is no longer active.';
+  } else {
+    detail = `Current status: ${esc(status)}.`;
+  }
+
+  return { heading, detail, cta };
+}
+
 async function postJSON(url, body){
   const res = await fetch(url, {
     method:'POST',
@@ -54,20 +93,7 @@ async function postJSON(url, body){
   return j;
 }
 
-function ratingStarRow(onPick){
-  const wrap = document.createElement('div');
-  wrap.className = 'mt-2';
-  wrap.innerHTML = `
-    <div class="btn-group" role="group" aria-label="Rate">
-      ${[1,2,3,4,5].map(n=>`<button type="button" class="btn btn-sm btn-outline-warning" data-star="${n}">${'★'.repeat(n)}</button>`).join('')}
-    </div>`;
-  wrap.querySelectorAll('[data-star]').forEach(btn=>{
-    btn.addEventListener('click', ()=> onPick(+btn.dataset.star));
-  });
-  return wrap;
-}
-
-function cardForResponded(m){
+function cardForResponded(m, onRefresh){
   const dt = m.ride_datetime ? new Date(m.ride_datetime.replace(' ','T')+'Z').toLocaleString() : 'Any time';
   const meId   = Number(window.MY_ID || 0);
   const meName = (window.ME_NAME && String(window.ME_NAME).trim()) || 'You';
@@ -80,17 +106,25 @@ function cardForResponded(m){
   const otherPhone    = amDriver ? m.passenger_phone    : m.driver_phone;
   const otherWhatsApp = amDriver ? m.passenger_whatsapp : m.driver_whatsapp;
 
+  const otherName = amDriver ? (m.other_display_passenger || 'your passenger') : (m.other_display_driver || 'your driver');
+  const scenario = respondedScenario(m, amDriver, esc(otherName));
+
   const card = document.createElement('div');
   card.className = 'card shadow-sm mb-2';
   card.innerHTML = `
     <div class="card-body">
-      <div class="d-flex justify-content-between align-items-start">
-        <div class="me-3">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
+        <div class="me-md-3 flex-grow-1">
           <div class="fw-semibold">${m.type==='offer' ? '🚗 Offer' : '🙋 Request'} — ${esc(m.from_text)} → ${esc(m.to_text)}</div>
-          <div class="mt-2">
+          <div class="border rounded-3 bg-body-tertiary p-3 mt-3">
+            <div class="fw-semibold text-primary">${esc(scenario.heading)}</div>
+            <div class="text-secondary small mt-1">${scenario.detail}</div>
+            ${scenario.cta ? `<div class="text-secondary small mt-2">${scenario.cta}</div>` : ''}
+          </div>
+          <div class="mt-3">
             <div class="d-flex align-items-center gap-2"><span class="badge text-bg-primary">Driver</span><span>${driverLabel}</span></div>
             <div class="d-flex align-items-center gap-2 mt-1"><span class="badge text-bg-success">Passenger</span><span>${passengerLabel}</span></div>
-            ${ (otherPhone||otherWhatsApp) ? `<div class="mt-1"><strong>Contact:</strong> ${contactHtml(otherPhone, otherWhatsApp)}</div>` : '' }
+            ${ (otherPhone||otherWhatsApp) ? `<div class="mt-2"><strong>Contact:</strong> ${contactHtml(otherPhone, otherWhatsApp)}</div>` : '' }
           </div>
         </div>
         <div class="text-end">
@@ -122,7 +156,10 @@ function cardForResponded(m){
     c.className='btn btn-sm btn-primary';
     c.textContent='Complete';
     c.addEventListener('click', async ()=>{
-      try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, { ride_id: m.ride_id, status:'completed' }); location.reload(); }
+      try{
+        await postJSON(`${window.API_BASE}/ride_set_status.php`, { ride_id: m.ride_id, status:'completed' });
+        onRefresh?.();
+      }
       catch(e){ handleActionError('driver:complete_failed', e, 'Failed to mark the ride complete.', { rideId: m.ride_id }); }
     });
     actions.appendChild(c);
@@ -132,14 +169,60 @@ function cardForResponded(m){
   if (m.match_status === 'completed' && !m.already_rated){
     const r = document.createElement('button');
     r.className='btn btn-sm btn-warning';
-    r.textContent='Rate';
+    r.textContent = amDriver ? 'Rate passenger' : 'Rate driver';
     r.addEventListener('click', ()=>{
-      r.replaceWith(ratingStarRow(async (stars)=>{
-        try{
-          await postJSON(`${window.API_BASE}/rate_submit.php`, { match_id: m.match_id, stars });
-          location.reload();
-        }catch(e){ logError('driver:rating_failed', e, { rideId: m.ride_id, matchId: m.match_id }); alert('Rating failed'); }
-      }));
+      const form = document.createElement('form');
+      form.className = 'rating-form border rounded-3 bg-body-tertiary p-3 text-start mt-2';
+      form.innerHTML = `
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Rate this ${amDriver ? 'passenger' : 'driver'}</label>
+          <div class="btn-group" role="group" aria-label="Rating">
+            ${[1,2,3,4,5].map(n => `
+              <input type="radio" class="btn-check" name="stars" id="rate-${m.match_id}-${n}" value="${n}" ${n===5?'checked':''}>
+              <label class="btn btn-sm btn-outline-warning" for="rate-${m.match_id}-${n}">${'★'.repeat(n)}</label>
+            `).join('')}
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Comment (optional)</label>
+          <textarea class="form-control form-control-sm" name="comment" rows="2" maxlength="1000" placeholder="Share highlights or things to improve"></textarea>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-sm btn-warning">Submit rating</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-cancel>Cancel</button>
+        </div>`;
+
+      actions.innerHTML = '';
+      actions.appendChild(form);
+
+      form.addEventListener('submit', async (event)=>{
+        event.preventDefault();
+        const data = new FormData(form);
+        const stars = Number(data.get('stars')) || 0;
+        const comment = String(data.get('comment') || '').trim();
+        if (stars < 1 || stars > 5) {
+          alert('Please select a rating between 1 and 5 stars.');
+          return;
+        }
+        form.querySelectorAll('button,textarea,input').forEach(elm => { elm.disabled = true; });
+        try {
+          await postJSON(`${window.API_BASE}/rate_submit.php`, {
+            ride_id: m.ride_id,
+            match_id: m.match_id,
+            stars,
+            comment
+          });
+          onRefresh?.();
+        } catch (e) {
+          logError('driver:rating_failed', e, { rideId: m.ride_id, matchId: m.match_id });
+          alert('Rating failed');
+          form.querySelectorAll('button,textarea,input').forEach(elm => { elm.disabled = false; });
+        }
+      });
+
+      form.querySelector('[data-cancel]')?.addEventListener('click', ()=>{
+        onRefresh?.();
+      });
     });
     actions.appendChild(r);
   }
@@ -204,14 +287,16 @@ async function render(el){
   const active    = data.items.filter(m => ['accepted','matched','confirmed','in_progress'].includes(m.match_status));
   const completed = data.items.filter(m => m.match_status === 'completed');
 
+  const refresh = () => render(el);
+
   if (!active.length) accWrap.innerHTML = `<div class="alert alert-info">No active trips right now.</div>`;
-  else { accWrap.innerHTML=''; active.forEach(m => accWrap.appendChild(cardForResponded(m))); }
+  else { accWrap.innerHTML=''; active.forEach(m => accWrap.appendChild(cardForResponded(m, refresh))); }
 
   if (!pending.length)  penWrap.innerHTML = `<div class="alert alert-info">No pending matches.</div>`;
-  else { penWrap.innerHTML='';  pending.forEach(m  => penWrap.appendChild(cardForResponded(m))); }
+  else { penWrap.innerHTML='';  pending.forEach(m  => penWrap.appendChild(cardForResponded(m, refresh))); }
 
   if (!completed.length) compWrap.innerHTML = `<div class="alert alert-secondary">No completed rides yet.</div>`;
-  else { compWrap.innerHTML=''; completed.forEach(m => compWrap.appendChild(cardForResponded(m))); }
+  else { compWrap.innerHTML=''; completed.forEach(m => compWrap.appendChild(cardForResponded(m, refresh))); }
 }
 
 export function mountDriver(el){

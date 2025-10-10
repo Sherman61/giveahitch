@@ -55,17 +55,91 @@ function contactHtml(phone, whatsapp){
   return parts.join(' ');
 }
 
-function ratingStarRow(onPick){
-  const wrap = document.createElement('div');
-  wrap.className = 'mt-2';
-  wrap.innerHTML = `
-    <div class="btn-group" role="group" aria-label="Rate">
-      ${[1,2,3,4,5].map(n=>`<button type="button" class="btn btn-sm btn-outline-warning" data-star="${n}">${'★'.repeat(n)}</button>`).join('')}
-    </div>`;
-  wrap.querySelectorAll('[data-star]').forEach(btn=>{
-    btn.addEventListener('click', ()=> onPick(+btn.dataset.star));
-  });
-  return wrap;
+const plural = (count, singular, pluralWord = null) => {
+  const n = Number(count) || 0;
+  const word = n === 1 ? singular : (pluralWord || `${singular}s`);
+  return `${n} ${word}`;
+};
+
+function summarizeCounts(item){
+  const counts = item.match_counts || {};
+  return {
+    pending: Number(counts.pending || 0),
+    active: Number((counts.accepted || 0) + (counts.confirmed || 0) + (counts.in_progress || 0)),
+    completed: Number(counts.completed || 0),
+  };
+}
+
+function scenarioSummary(item){
+  const { pending, active, completed } = summarizeCounts(item);
+  const type = item.type;
+  const status = item.status;
+  const confirmed = item.confirmed;
+  const manageUrl = `/manage_ride.php?id=${item.id}`;
+  const otherDisplay = confirmed
+    ? (type === 'offer'
+        ? (confirmed.passenger_display || `Passenger #${confirmed.passenger_user_id}`)
+        : (confirmed.driver_display || `Driver #${confirmed.driver_user_id}`))
+    : '';
+  const otherName = esc(otherDisplay || 'your match');
+
+  let heading = type === 'offer' ? 'You offered a ride' : 'You requested a ride';
+  let detail = '';
+  let cta = '';
+
+  if (status === 'open') {
+    if (type === 'offer') {
+      detail = pending > 0
+        ? `${plural(pending, 'passenger request')} ${pending === 1 ? 'is' : 'are'} waiting for your response.`
+        : 'No passengers have requested this ride yet.';
+      if (pending > 0) {
+        cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Review passenger requests</a>`;
+      }
+    } else {
+      detail = pending > 0
+        ? `${plural(pending, 'driver offer')} ${pending === 1 ? 'is' : 'are'} ready for you to review.`
+        : 'No drivers have offered yet.';
+      if (pending > 0) {
+        cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Review driver offers</a>`;
+      }
+    }
+  } else if (status === 'matched' || status === 'confirmed') {
+    if (confirmed) {
+      detail = type === 'offer'
+        ? `You're matched with ${otherName}. Coordinate pickup and start the trip when you're ready.`
+        : `Driver ${otherName} accepted your request. Confirm plans before you meet up.`;
+    } else {
+      detail = 'You have an active match awaiting confirmation.';
+    }
+    if (pending > 0) {
+      detail += ` You also have ${plural(pending, type === 'offer' ? 'other passenger request' : 'other driver offer')} waiting.`;
+    }
+    cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Manage ride</a>`;
+  } else if (status === 'in_progress') {
+    detail = confirmed
+      ? `You're on the road with ${otherName}.`
+      : 'This ride is marked as in progress.';
+    cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Update status</a>`;
+  } else if (status === 'completed') {
+    detail = confirmed
+      ? `You completed this trip with ${otherName}.`
+      : 'This ride is completed.';
+    if (!item.already_rated) {
+      detail += ' Please rate the other rider to wrap things up.';
+      cta = '<span class="fw-semibold text-warning">Awaiting your rating</span>';
+    }
+  } else if (status === 'cancelled' || status === 'rejected') {
+    detail = 'This ride is archived for your records.';
+  } else {
+    detail = `Current status: ${esc(status)}.`;
+  }
+
+  const countsLine = [];
+  if (pending > 0) countsLine.push(`${plural(pending, type === 'offer' ? 'passenger request' : 'driver offer')}`);
+  if (active > 0) countsLine.push(`${plural(active, 'active match')}`);
+  if (completed > 0) countsLine.push(`${plural(completed, 'completed match')}`);
+
+  return { heading, detail, cta, countsLine };
 }
 
 async function load(el){
@@ -162,24 +236,36 @@ function renderCard(item, el){
 
   card.innerHTML = `
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-2">
           <div>
             <h5 class="mb-1">${item.type==='offer'?'🚗 Offer':'🙋 Looking (request)'}</h5>
             ${badge(st)}
           </div>
           <span class="badge text-bg-light">${esc(dt)}</span>
         </div>
-        <div class="row mt-2">
+        <div class="border rounded-3 bg-body-tertiary p-3 mt-3" id="scenario-${item.id}"></div>
+        <div class="row mt-3 g-3 align-items-start">
           <div class="col-md-8">
             <div><strong>From:</strong> ${esc(item.from_text)}</div>
             <div><strong>To:</strong> ${esc(item.to_text)}</div>
             <div><strong>Seats:</strong> ${esc(seats)}</div>
             ${rolesHtml}
           </div>
-          <div class="col-md-4 text-end" id="actions-${item.id}">
+          <div class="col-md-4 text-md-end" id="actions-${item.id}">
           </div>
         </div>
       </div>`;
+
+  const scenario = scenarioSummary(item);
+  const scenarioEl = card.querySelector(`#scenario-${item.id}`);
+  if (scenarioEl) {
+    scenarioEl.innerHTML = `
+      <div class="fw-semibold text-primary">${esc(scenario.heading)}</div>
+      <div class="text-secondary small mt-1">${scenario.detail}</div>
+      ${scenario.countsLine.length ? `<div class="text-secondary small mt-2"><i class="bi bi-people me-1"></i>${scenario.countsLine.join(' · ')}</div>` : ''}
+      ${scenario.cta ? `<div class="mt-2">${scenario.cta}</div>` : ''}
+    `;
+  }
 
   const actions = card.querySelector(`#actions-${item.id}`);
   const addBtn = (txt, cls, handler) => {
@@ -208,7 +294,7 @@ function renderCard(item, el){
     actions.appendChild(del);
   }
 
-  if (st === 'matched' && item.confirmed){
+  if ((st === 'matched' || st === 'confirmed') && item.confirmed){
     addBtn('Start trip', 'btn-outline-primary', async ()=>{
       try{ await postJSON(`${window.API_BASE}/ride_set_status.php`, {ride_id:item.id, status:'in_progress'}); load(el); }
       catch(e){ handleActionError('posted:start_failed', e, 'Failed to start this ride.', { rideId: item.id }); }
@@ -234,17 +320,60 @@ function renderCard(item, el){
   if (st === 'completed' && item.confirmed && !item.already_rated){
     const rateBtn = document.createElement('button');
     rateBtn.className='btn btn-sm btn-warning ms-2';
-    rateBtn.textContent='Rate';
+    rateBtn.textContent = item.type === 'offer' ? 'Rate passenger' : 'Rate driver';
     rateBtn.addEventListener('click', ()=>{
-      rateBtn.replaceWith(ratingStarRow(async (stars)=>{
-        try{
+      const form = document.createElement('form');
+      form.className = 'rating-form border rounded-3 bg-body-tertiary p-3 text-start mt-2';
+      form.innerHTML = `
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Rate this ${item.type === 'offer' ? 'passenger' : 'driver'}</label>
+          <div class="btn-group" role="group" aria-label="Rating">
+            ${[1,2,3,4,5].map(n => `
+              <input type="radio" class="btn-check" name="stars" id="rate-${item.id}-${n}" value="${n}" ${n===5?'checked':''}>
+              <label class="btn btn-sm btn-outline-warning" for="rate-${item.id}-${n}">${'★'.repeat(n)}</label>
+            `).join('')}
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Comment (optional)</label>
+          <textarea class="form-control form-control-sm" name="comment" rows="2" maxlength="1000" placeholder="Share highlights or things to improve"></textarea>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-sm btn-warning">Submit rating</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-cancel>Cancel</button>
+        </div>`;
+
+      actions.innerHTML = '';
+      actions.appendChild(form);
+
+      form.addEventListener('submit', async (event)=>{
+        event.preventDefault();
+        const data = new FormData(form);
+        const stars = Number(data.get('stars')) || 0;
+        const comment = String(data.get('comment') || '').trim();
+        if (stars < 1 || stars > 5) {
+          alert('Please select a rating between 1 and 5 stars.');
+          return;
+        }
+        form.querySelectorAll('button,textarea,input').forEach(elm => { elm.disabled = true; });
+        try {
           await postJSON(`${window.API_BASE}/rate_submit.php`, {
+            ride_id: item.id,
             match_id: item.confirmed.match_id,
-            stars
+            stars,
+            comment
           });
           load(el);
-        }catch(e){ logError('posted:rating_failed', e, { rideId: item.id, matchId: item.confirmed?.match_id }); alert('Rating failed'); }
-      }));
+        } catch (e) {
+          logError('posted:rating_failed', e, { rideId: item.id, matchId: item.confirmed?.match_id });
+          alert('Rating failed');
+          form.querySelectorAll('button,textarea,input').forEach(elm => { elm.disabled = false; });
+        }
+      });
+
+      form.querySelector('[data-cancel]')?.addEventListener('click', ()=>{
+        load(el);
+      });
     });
     actions.appendChild(rateBtn);
   }
