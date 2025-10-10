@@ -5,6 +5,8 @@ require_once __DIR__.'/../lib/auth.php';
 
 start_secure_session();                     // <-- start first
 $csrf = \App\Auth\csrf_token();             // <-- then get token
+$intentRideId = isset($_GET['acceptRide']) ? max(0, (int)$_GET['acceptRide']) : 0;
+$intentQuery  = $intentRideId ? ('?acceptRide=' . $intentRideId) : '';
 ?>
 <!doctype html>
 <html lang="en">
@@ -25,7 +27,7 @@ $csrf = \App\Auth\csrf_token();             // <-- then get token
   <div class="container">
     <a class="navbar-brand brand" href="/rides.php">Glitch a Hitch</a>
     <div class="ms-auto">
-      <a class="btn btn-outline-secondary btn-sm" href="/signup.php">Sign up</a>
+      <a class="btn btn-outline-secondary btn-sm" href="/signup.php<?= $intentQuery ?>">Sign up</a>
     </div>
   </div>
 </nav>
@@ -47,7 +49,7 @@ $csrf = \App\Auth\csrf_token();             // <-- then get token
       <input type="password" class="form-control" name="password" required autocomplete="current-password">
     </div>
     <button class="btn btn-primary w-100 py-2">Log in</button>
-    <div class="text-center text-secondary">New here? <a href="/signup.php">Create an account</a></div>
+    <div class="text-center text-secondary">New here? <a href="/signup.php<?= $intentQuery ?>">Create an account</a></div>
   </form>
 </div>
 

@@ -2,6 +2,8 @@
 declare(strict_types=1);
 require_once __DIR__.'/../lib/auth.php';
 $csrf = \App\Auth\csrf_token();
+$intentRideId = isset($_GET['acceptRide']) ? max(0, (int)$_GET['acceptRide']) : 0;
+$intentQuery  = $intentRideId ? ('?acceptRide=' . $intentRideId) : '';
 ?>
 <!doctype html>
 <html lang="en">
@@ -21,7 +23,7 @@ $csrf = \App\Auth\csrf_token();
   <div class="container">
     <a class="navbar-brand brand" href="/rides.php">Glitch a Hitch</a>
     <div class="ms-auto">
-      <a class="btn btn-outline-secondary btn-sm" href="/login.php">Log in</a>
+      <a class="btn btn-outline-secondary btn-sm" href="/login.php<?= $intentQuery ?>">Log in</a>
     </div>
   </div>
 </nav>
@@ -49,13 +51,69 @@ $csrf = \App\Auth\csrf_token();
       <div class="form-text">At least 8 characters.</div>
     </div>
     <button class="btn btn-primary w-100 py-2">Create account</button>
-    <div class="text-center text-secondary">Already have an account? <a href="/login.php">Log in</a></div>
+    <div class="text-center text-secondary">Already have an account? <a href="/login.php<?= $intentQuery ?>">Log in</a></div>
   </form>
 </div>
 
 <script>
 const form = document.getElementById('form');
 const msg  = document.getElementById('msg');
+
+const STORAGE_KEY_ACCEPT_INTENT = 'ga_accept_ride_intent_v1';
+const ACCEPT_INTENT_TTL = 24 * 60 * 60 * 1000;
+
+const getStorage = () => {
+  try {
+    return window.localStorage || null;
+  } catch (err) {
+    console.warn('signup:storage_unavailable', err);
+    return null;
+  }
+};
+
+const storage = getStorage();
+
+const rememberAcceptIntent = (rideId) => {
+  if (!storage || !rideId) return;
+  try {
+    storage.setItem(STORAGE_KEY_ACCEPT_INTENT, JSON.stringify({ rideId, ts: Date.now() }));
+  } catch (err) {
+    console.warn('signup:remember_intent_failed', err);
+  }
+};
+
+const readAcceptIntent = () => {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(STORAGE_KEY_ACCEPT_INTENT);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const rideId = Number(parsed?.rideId || 0);
+    const ts = Number(parsed?.ts || 0);
+    if (!rideId) {
+      storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
+      return null;
+    }
+    if (ts && Date.now() - ts > ACCEPT_INTENT_TTL) {
+      storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
+      return null;
+    }
+    return { rideId, ts };
+  } catch (err) {
+    console.warn('signup:read_intent_failed', err);
+    storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
+    return null;
+  }
+};
+
+const params = new URLSearchParams(location.search);
+const acceptRideId = Number(params.get('acceptRide') || params.get('accept') || 0) || 0;
+if (acceptRideId) {
+  rememberAcceptIntent(acceptRideId);
+  msg.className = 'alert alert-info';
+  msg.textContent = 'Sign up to accept your selected ride.';
+  msg.classList.remove('d-none');
+}
 
 function show(type, text){
   msg.className = 'alert alert-'+type;
@@ -94,7 +152,15 @@ form.addEventListener('submit', async (e) => {
       return show('danger','Could not create account.');
     }
     show('success','Account created! Redirecting…');
-    setTimeout(()=> location.href = '/my_rides.php', 700);
+    const intent = readAcceptIntent();
+    const target = intent?.rideId
+      ? (() => {
+          const url = new URL('/rides.php', location.origin);
+          url.searchParams.set('acceptRide', String(intent.rideId));
+          return url.toString();
+        })()
+      : '/my_rides.php';
+    setTimeout(()=> location.href = target, 700);
   } catch(err){
     show('danger','Network error. Please try again.');
   }
