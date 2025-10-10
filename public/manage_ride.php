@@ -123,7 +123,7 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
           <div class="card-body d-flex justify-content-between">
             <div>
               <div class="fw-semibold">Accepted match</div>
-              <div class="text-muted small">Other party: ${esc(a.other_display || 'User')}</div>
+              <a class="text-muted small" href="#test">Other party: ${esc(a.other_display || 'User')}</a>
               <div class="mt-1">${badge(a.status || 'accepted')}</div>
               ${contactBlock || ''}
             </div>

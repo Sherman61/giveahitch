@@ -7,7 +7,7 @@
 </a>
       <div class="ms-4 d-none d-md-flex align-items-center gap-3">
         <a class="nav-link px-0" href="/about.php">About</a>
-        <a class="nav-link px-0" href="/rate_rides.php">Rate rides</a>
+        
       </div>
       <div class="ms-auto d-flex align-items-center gap-3 flex-wrap justify-content-end">
         <div class="d-flex d-md-none align-items-center gap-2">

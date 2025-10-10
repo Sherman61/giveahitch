@@ -164,7 +164,7 @@ $csrf = \App\Auth\csrf_token();
       <div class="col-lg-8">
         <div class="hero-card h-100 p-4 p-lg-5 shadow-sm">
           <div class="position-relative" style="z-index: 1;">
-            <h1 class="fw-bold mb-3">Find a ride without the endless group chats.</h1>
+            <!-- <h1 class="fw-bold mb-3">Find a ride without the endless group chats.</h1> -->
             <p class="lead mb-4">Discover live ride offers and requests from the Glitch a Hitch community. Search, filter, and connect instantly.</p>
             <div class="d-flex flex-wrap gap-2">
               <a class="btn btn-light text-primary fw-semibold" href="/create.php"><i class="bi bi-plus-circle me-1"></i>Post a ride</a>
