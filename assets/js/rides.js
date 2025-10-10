@@ -34,6 +34,21 @@ const getStorage = () => {
 
 const storage = getStorage();
 
+const clearAcceptQueryParam = () => {
+  try {
+    const url = new URL(window.location.href);
+    const hadParam = url.searchParams.has('acceptRide') || url.searchParams.has('accept');
+    if (!hadParam) return;
+    url.searchParams.delete('acceptRide');
+    url.searchParams.delete('accept');
+    const newSearch = url.searchParams.toString();
+    const newUrl = `${url.pathname}${newSearch ? `?${newSearch}` : ''}${url.hash}`;
+    window.history.replaceState(window.history.state, document.title, newUrl);
+  } catch (err) {
+    logger.warn?.('rides:clear_accept_param_failed', err);
+  }
+};
+
 const readAcceptIntent = () => {
   if (!storage) return null;
   try {
@@ -67,7 +82,11 @@ const rememberAcceptIntent = (rideId) => {
   }
 };
 
+let acceptPromptShownFor = null;
+
 const clearAcceptIntent = () => {
+  acceptPromptShownFor = null;
+  clearAcceptQueryParam();
   if (!storage) return;
   try {
     storage.removeItem(STORAGE_KEY_ACCEPT_INTENT);
@@ -390,6 +409,7 @@ const maybePromptPendingAccept = () => {
     if (qpRide) {
       pendingAcceptIntent = { rideId: qpRide, ts: Date.now() };
       rememberAcceptIntent(qpRide);
+      clearAcceptQueryParam();
     }
     if (!pendingAcceptIntent) return;
   }
@@ -413,6 +433,9 @@ const maybePromptPendingAccept = () => {
     pendingAcceptIntent = null;
     return;
   }
+
+  if (acceptPromptShownFor === rideId) return;
+  acceptPromptShownFor = rideId;
 
   const message = `You wanted to accept the ride from ${ride.from_text} to ${ride.to_text}. Accept it now?`;
   if (confirm(message)) {
