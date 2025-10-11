@@ -109,8 +109,23 @@ const escapeHtml = (value) => value
 
 const parseDate = (value) => {
   if (!value) return null;
-  const iso = value.includes('T') ? value : value.replace(' ', 'T');
-  const date = new Date(/Z$/i.test(iso) ? iso : `${iso}Z`);
+  const str = String(value).trim();
+  if (!str) return null;
+
+  const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(str);
+  if (!hasZone) {
+    const normalised = str.replace('T', ' ');
+    const match = normalised.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?)?$/);
+    if (match) {
+      const [, y, m, d, hh = '0', mm = '0', ss = '0', fraction = '0'] = match;
+      const ms = fraction ? Math.round(Number(`0.${fraction}`) * 1000) : 0;
+      const date = new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss), ms);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+  }
+
+  const iso = str.includes('T') ? str : str.replace(' ', 'T');
+  const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
