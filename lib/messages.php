@@ -124,11 +124,11 @@ function format_message_row(array $row): array
     ];
 }
 
-function mark_thread_read(PDO $pdo, array $thread, int $userId): void
+function mark_thread_read(PDO $pdo, array $thread, int $userId): array
 {
     $threadId = (int)($thread['id'] ?? 0);
     if ($threadId <= 0) {
-        return;
+        return ['messages' => [], 'message_ids' => []];
     }
 
     $col = null;
@@ -143,10 +143,45 @@ function mark_thread_read(PDO $pdo, array $thread, int $userId): void
             ->execute([':id' => $threadId]);
     }
 
-    $pdo->prepare('UPDATE user_messages
-                    SET read_at = COALESCE(read_at, NOW())
-                    WHERE thread_id = :tid AND sender_user_id <> :uid AND read_at IS NULL')
-        ->execute([':tid' => $threadId, ':uid' => $userId]);
+    $stmt = $pdo->prepare('SELECT id
+                            FROM user_messages
+                            WHERE thread_id = :tid
+                              AND sender_user_id <> :uid
+                              AND read_at IS NULL');
+    $stmt->execute([':tid' => $threadId, ':uid' => $userId]);
+    $ids = array_map(static fn ($value): int => (int)$value, $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+    if (!$ids) {
+        return ['messages' => [], 'message_ids' => []];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+    $updateSql = sprintf('UPDATE user_messages SET read_at = NOW() WHERE id IN (%s)', $placeholders);
+    $update = $pdo->prepare($updateSql);
+    foreach ($ids as $index => $id) {
+        $update->bindValue($index + 1, $id, PDO::PARAM_INT);
+    }
+    $update->execute();
+
+    $fetchSql = sprintf('SELECT id, read_at FROM user_messages WHERE id IN (%s)', $placeholders);
+    $fetch = $pdo->prepare($fetchSql);
+    foreach ($ids as $index => $id) {
+        $fetch->bindValue($index + 1, $id, PDO::PARAM_INT);
+    }
+    $fetch->execute();
+
+    $rows = $fetch->fetchAll(PDO::FETCH_ASSOC);
+
+    $messages = array_map(static fn (array $row): array => [
+        'id' => (int)$row['id'],
+        'read_at' => $row['read_at'],
+    ], $rows);
+
+    return [
+        'messages' => $messages,
+        'message_ids' => $ids,
+    ];
 }
 
 function list_threads(PDO $pdo, int $userId): array
