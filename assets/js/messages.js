@@ -475,7 +475,8 @@ const fetchThreads = async ({ keepSelection = true } = {}) => {
 };
 
 const fetchConversation = async (userId, options = {}) => {
-  if (!userId) return;
+  const targetId = Number(userId);
+  if (!Number.isFinite(targetId) || targetId <= 0) return;
   try {
     clearMessageAlert();
     const preserveTyping = !!options.preserveTyping;
@@ -486,13 +487,13 @@ const fetchConversation = async (userId, options = {}) => {
     if (!preserveTyping) {
       stopSelfTyping();
     }
-    const res = await fetch(`${state.apiBase}/messages.php?user_id=${encodeURIComponent(userId)}`, { credentials: 'same-origin' });
+    const res = await fetch(`${state.apiBase}/messages.php?user_id=${encodeURIComponent(targetId)}`, { credentials: 'same-origin' });
     if (!res.ok) throw new Error('Unable to load conversation');
     const data = await res.json();
     if (!data?.ok) throw new Error(data?.error || 'Unable to load conversation');
 
     state.pendingMessages.clear();
-    state.activeUserId = userId;
+    state.activeUserId = targetId;
     state.activeOtherUser = data.other_user || null;
     state.messaging = data.messaging || { allowed: false, reason: '' };
     state.messages = Array.isArray(data.messages) ? data.messages.map((msg) => ({ ...msg, pending: false })) : [];
@@ -642,11 +643,15 @@ const handleSocketMessage = (payload) => {
   const message = payload.message;
   if (!message) return;
   const clientRef = payload.client_ref || null;
-  const otherId = payload.sender_id === state.meId ? payload.recipient_id : payload.sender_id;
-  if (payload.sender_id !== state.meId) {
-    setTypingForUser(Number(otherId), false);
+  const senderId = Number(payload.sender_id);
+  const recipientId = Number(payload.recipient_id);
+  const otherId = senderId === state.meId ? recipientId : senderId;
+  const otherNumericId = Number.isFinite(otherId) ? otherId : null;
+
+  if (otherNumericId && senderId !== state.meId) {
+    setTypingForUser(otherNumericId, false);
   }
-  if (state.activeUserId === otherId) {
+  if (otherNumericId && state.activeUserId === otherNumericId) {
     const messagePayload = { ...message, client_ref: clientRef, pending: false };
     let changed = false;
     if (clientRef) {
