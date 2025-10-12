@@ -359,3 +359,196 @@ function send_message(PDO $pdo, int $senderId, int $recipientId, string $body): 
         throw $e;
     }
 }
+
+/**
+ * Recalculate cached metadata for a thread after mutations.
+ *
+ * @throws RuntimeException when the thread cannot be refreshed.
+ */
+function refresh_thread(PDO $pdo, array $thread): array
+{
+    $threadId = (int)($thread['id'] ?? 0);
+    if ($threadId <= 0) {
+        throw new RuntimeException('Thread missing identifier.');
+    }
+
+    $userA = (int)$thread['user_a_id'];
+    $userB = (int)$thread['user_b_id'];
+
+    $last = latest_message($pdo, $threadId);
+    $lastId = $last['id'] ?? null;
+    $lastCreatedAt = $last['created_at'] ?? null;
+
+    $stmt = $pdo->prepare('SELECT sender_user_id, COUNT(*) AS unread
+                             FROM user_messages
+                             WHERE thread_id = :tid
+                               AND read_at IS NULL
+                             GROUP BY sender_user_id');
+    $stmt->execute([':tid' => $threadId]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $counts = [];
+    foreach ($rows as $row) {
+        $counts[(int)$row['sender_user_id']] = (int)$row['unread'];
+    }
+
+    $userAUnread = $counts[$userB] ?? 0;
+    $userBUnread = $counts[$userA] ?? 0;
+
+    $update = $pdo->prepare('UPDATE user_message_threads
+                                SET last_message_id = :mid,
+                                    last_message_at = :mat,
+                                    updated_at = NOW(),
+                                    user_a_unread = :ua,
+                                    user_b_unread = :ub
+                                WHERE id = :tid');
+
+    if ($lastId !== null) {
+        $update->bindValue(':mid', (int)$lastId, PDO::PARAM_INT);
+    } else {
+        $update->bindValue(':mid', null, PDO::PARAM_NULL);
+    }
+
+    if ($lastCreatedAt !== null) {
+        $update->bindValue(':mat', $lastCreatedAt, PDO::PARAM_STR);
+    } else {
+        $update->bindValue(':mat', null, PDO::PARAM_NULL);
+    }
+
+    $update->bindValue(':ua', $userAUnread, PDO::PARAM_INT);
+    $update->bindValue(':ub', $userBUnread, PDO::PARAM_INT);
+    $update->bindValue(':tid', $threadId, PDO::PARAM_INT);
+    $update->execute();
+
+    $fresh = thread_by_id($pdo, $threadId);
+    if (!$fresh) {
+        throw new RuntimeException('Unable to refresh conversation.');
+    }
+
+    return $fresh;
+}
+
+/**
+ * Delete a message authored by the acting user, enforcing a grace period.
+ *
+ * @return array{thread:array|null,other_user_id:int}
+ */
+function delete_message(PDO $pdo, int $messageId, int $actorId, int $graceSeconds = 30): array
+{
+    if ($messageId <= 0) {
+        throw new RuntimeException('Invalid message.');
+    }
+
+    $message = message_by_id($pdo, $messageId);
+    if (!$message) {
+        throw new RuntimeException('Message not found.');
+    }
+
+    if ((int)$message['sender_user_id'] !== $actorId) {
+        throw new RuntimeException('You can only delete your own messages.');
+    }
+
+    $createdAt = $message['created_at'] ?? null;
+    if ($createdAt) {
+        $createdTs = strtotime($createdAt);
+        if ($createdTs !== false && $createdTs < (time() - max(1, $graceSeconds))) {
+            throw new RuntimeException('You can only delete a message shortly after sending it.');
+        }
+    }
+
+    $thread = thread_by_id($pdo, (int)$message['thread_id']);
+    if (!$thread) {
+        throw new RuntimeException('Conversation missing.');
+    }
+
+    $userA = (int)$thread['user_a_id'];
+    $userB = (int)$thread['user_b_id'];
+    if ($actorId !== $userA && $actorId !== $userB) {
+        throw new RuntimeException('You are not part of this conversation.');
+    }
+    $otherUserId = ($actorId === $userA) ? $userB : $userA;
+
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare('DELETE FROM user_messages WHERE id = :id')
+            ->execute([':id' => $messageId]);
+
+        $updatedThread = refresh_thread($pdo, $thread);
+
+        $pdo->commit();
+
+        return [
+            'thread' => $updatedThread,
+            'other_user_id' => $otherUserId,
+        ];
+    } catch (RuntimeException $e) {
+        $pdo->rollBack();
+        throw $e;
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Remove all messages authored by the acting user in a conversation.
+ *
+ * @return array{thread:array|null,deleted_ids:int[],other_user_id:int}
+ */
+function clear_user_messages(PDO $pdo, int $actorId, int $otherUserId): array
+{
+    if ($actorId <= 0 || $otherUserId <= 0) {
+        throw new RuntimeException('Invalid conversation.');
+    }
+
+    $thread = find_thread($pdo, $actorId, $otherUserId);
+    if (!$thread) {
+        return [
+            'thread' => null,
+            'deleted_ids' => [],
+            'other_user_id' => $otherUserId,
+        ];
+    }
+
+    $threadId = (int)$thread['id'];
+
+    $stmt = $pdo->prepare('SELECT id FROM user_messages WHERE thread_id = :tid AND sender_user_id = :uid');
+    $stmt->execute([':tid' => $threadId, ':uid' => $actorId]);
+    $ids = array_map(static fn ($value): int => (int)$value, $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+    if (!$ids) {
+        $fresh = refresh_thread($pdo, $thread);
+        return [
+            'thread' => $fresh,
+            'deleted_ids' => [],
+            'other_user_id' => $otherUserId,
+        ];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+    $pdo->beginTransaction();
+    try {
+        $delete = $pdo->prepare(sprintf('DELETE FROM user_messages WHERE id IN (%s)', $placeholders));
+        foreach ($ids as $index => $id) {
+            $delete->bindValue($index + 1, $id, PDO::PARAM_INT);
+        }
+        $delete->execute();
+
+        $updatedThread = refresh_thread($pdo, $thread);
+
+        $pdo->commit();
+
+        return [
+            'thread' => $updatedThread,
+            'deleted_ids' => $ids,
+            'other_user_id' => $otherUserId,
+        ];
+    } catch (RuntimeException $e) {
+        $pdo->rollBack();
+        throw $e;
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
