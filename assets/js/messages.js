@@ -35,7 +35,7 @@ const state = {
   typingTimers: new Map(),
   selfTyping: { active: false, timeout: null, lastSentAt: 0 },
   pendingMessages: new Map(),
-  polling: { active: false, threadsTimer: null, conversationTimer: null },
+  polling: { active: false, threadsTimer: null, conversationTimer: null, sessionId: 0 },
   fetchingThreads: false,
   fetchingConversation: new Set(),
 };
@@ -462,7 +462,7 @@ const upsertThread = (thread) => {
   state.threads.unshift(thread);
 };
 
-const fetchThreads = async ({ keepSelection = true, skipIfBusy = false } = {}) => {
+const fetchThreads = async ({ keepSelection = true, skipIfBusy = false, pollingSessionId = null } = {}) => {
   if (skipIfBusy && state.fetchingThreads) {
     return;
   }
@@ -472,6 +472,9 @@ const fetchThreads = async ({ keepSelection = true, skipIfBusy = false } = {}) =
     if (!res.ok) throw new Error('Unable to load conversations');
     const data = await res.json();
     if (!data?.ok) throw new Error(data?.error || 'Unable to load conversations');
+    if (pollingSessionId && (!state.polling.active || pollingSessionId !== state.polling.sessionId)) {
+      return;
+    }
     state.threads = Array.isArray(data.threads) ? data.threads : [];
     if (keepSelection && state.activeUserId) {
       const match = state.threads.find((t) => t.other_user?.id === state.activeUserId);
@@ -507,6 +510,9 @@ const fetchConversation = async (userId, options = {}) => {
     if (!res.ok) throw new Error('Unable to load conversation');
     const data = await res.json();
     if (!data?.ok) throw new Error(data?.error || 'Unable to load conversation');
+    if (options.pollingSessionId && (!state.polling.active || options.pollingSessionId !== state.polling.sessionId)) {
+      return;
+    }
 
     state.pendingMessages.clear();
     state.activeUserId = targetId;
@@ -760,17 +766,20 @@ const stopPolling = () => {
 const startPolling = (reason = 'unknown') => {
   if (state.polling.active) return;
   logger.info('messages:polling_start', { reason });
+  state.polling.sessionId += 1;
   state.polling.active = true;
-  fetchThreads({ keepSelection: true, skipIfBusy: true });
+  const sessionId = state.polling.sessionId;
+  fetchThreads({ keepSelection: true, skipIfBusy: true, pollingSessionId: sessionId });
   if (state.activeUserId) {
     fetchConversation(state.activeUserId, {
       preserveTyping: true,
       preservePending: true,
       skipIfBusy: true,
+      pollingSessionId: sessionId,
     });
   }
   state.polling.threadsTimer = setInterval(() => {
-    fetchThreads({ keepSelection: true, skipIfBusy: true });
+    fetchThreads({ keepSelection: true, skipIfBusy: true, pollingSessionId: sessionId });
   }, POLL_THREADS_INTERVAL_MS);
   state.polling.conversationTimer = setInterval(() => {
     if (!state.activeUserId) return;
@@ -778,6 +787,7 @@ const startPolling = (reason = 'unknown') => {
       preserveTyping: true,
       preservePending: true,
       skipIfBusy: true,
+      pollingSessionId: sessionId,
     });
   }, POLL_CONVERSATION_INTERVAL_MS);
 };
