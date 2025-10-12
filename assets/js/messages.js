@@ -16,6 +16,8 @@ const typingIndicator = document.getElementById('typingIndicator');
 const TYPING_IDLE_TIMEOUT_MS = 4000;
 const TYPING_DISPLAY_TIMEOUT_MS = 6000;
 const TYPING_BROADCAST_THROTTLE_MS = 1200;
+const POLL_THREADS_INTERVAL_MS = 15000;
+const POLL_CONVERSATION_INTERVAL_MS = 6000;
 
 const state = {
   meId: Number(window.ME_USER_ID || 0) || null,
@@ -33,6 +35,9 @@ const state = {
   typingTimers: new Map(),
   selfTyping: { active: false, timeout: null, lastSentAt: 0 },
   pendingMessages: new Map(),
+  polling: { active: false, threadsTimer: null, conversationTimer: null },
+  fetchingThreads: false,
+  fetchingConversation: new Set(),
 };
 
 const escapeHtml = (value) => (value === null || value === undefined)
@@ -457,7 +462,11 @@ const upsertThread = (thread) => {
   state.threads.unshift(thread);
 };
 
-const fetchThreads = async ({ keepSelection = true } = {}) => {
+const fetchThreads = async ({ keepSelection = true, skipIfBusy = false } = {}) => {
+  if (skipIfBusy && state.fetchingThreads) {
+    return;
+  }
+  state.fetchingThreads = true;
   try {
     const res = await fetch(`${state.apiBase}/messages.php`, { credentials: 'same-origin' });
     if (!res.ok) throw new Error('Unable to load conversations');
@@ -471,13 +480,20 @@ const fetchThreads = async ({ keepSelection = true } = {}) => {
     renderThreads();
   } catch (err) {
     logger.error('messages:fetch_threads_failed', err);
+  } finally {
+    state.fetchingThreads = false;
   }
 };
 
 const fetchConversation = async (userId, options = {}) => {
   const targetId = Number(userId);
   if (!Number.isFinite(targetId) || targetId <= 0) return;
+  const skipIfBusy = options.skipIfBusy ?? false;
+  if (skipIfBusy && state.fetchingConversation.has(targetId)) {
+    return;
+  }
   try {
+    state.fetchingConversation.add(targetId);
     clearMessageAlert();
     const preserveTyping = !!options.preserveTyping;
     const preservePending = !!options.preservePending;
@@ -524,6 +540,8 @@ const fetchConversation = async (userId, options = {}) => {
   } catch (err) {
     logger.error('messages:fetch_conversation_failed', err);
     showMessageAlert(err.message || 'Unable to load conversation.');
+  } finally {
+    state.fetchingConversation.delete(targetId);
   }
 };
 
@@ -611,15 +629,20 @@ const authenticateSocket = (socket) => {
     socket.emit('auth', window.WS_AUTH, (response) => {
       if (!response || !response.ok) {
         logger.warn('messages:socket_auth_failed', response);
+        state.socketAuthed = false;
+        startPolling('auth_failed');
         return;
       }
       state.socketAuthed = true;
+      stopPolling();
       logger.info('messages:socket_auth_ok', {
         rooms: Array.isArray(response.rooms) ? response.rooms : undefined,
       });
     });
   } catch (err) {
     logger.warn('messages:socket_auth_error', err);
+    state.socketAuthed = false;
+    startPolling('auth_error');
   }
 };
 
@@ -720,8 +743,50 @@ const handleSocketRead = (payload) => {
   }
 };
 
+const stopPolling = () => {
+  if (!state.polling.active) return;
+  logger.info('messages:polling_stop', {});
+  if (state.polling.threadsTimer) {
+    clearInterval(state.polling.threadsTimer);
+    state.polling.threadsTimer = null;
+  }
+  if (state.polling.conversationTimer) {
+    clearInterval(state.polling.conversationTimer);
+    state.polling.conversationTimer = null;
+  }
+  state.polling.active = false;
+};
+
+const startPolling = (reason = 'unknown') => {
+  if (state.polling.active) return;
+  logger.info('messages:polling_start', { reason });
+  state.polling.active = true;
+  fetchThreads({ keepSelection: true, skipIfBusy: true });
+  if (state.activeUserId) {
+    fetchConversation(state.activeUserId, {
+      preserveTyping: true,
+      preservePending: true,
+      skipIfBusy: true,
+    });
+  }
+  state.polling.threadsTimer = setInterval(() => {
+    fetchThreads({ keepSelection: true, skipIfBusy: true });
+  }, POLL_THREADS_INTERVAL_MS);
+  state.polling.conversationTimer = setInterval(() => {
+    if (!state.activeUserId) return;
+    fetchConversation(state.activeUserId, {
+      preserveTyping: true,
+      preservePending: true,
+      skipIfBusy: true,
+    });
+  }, POLL_CONVERSATION_INTERVAL_MS);
+};
+
 const initSocket = () => {
-  if (typeof io !== 'function') return;
+  if (typeof io !== 'function') {
+    startPolling('socket_io_unavailable');
+    return;
+  }
   try {
     const options = { path: '/socket.io', transports: ['websocket', 'polling'] };
     const wsUrl = typeof window.WS_URL === 'string' && window.WS_URL ? window.WS_URL : undefined;
@@ -747,14 +812,17 @@ const initSocket = () => {
 
     socket.on('connect_error', (err) => {
       logger.warn('messages:socket_connect_error', err);
+      startPolling('connect_error');
     });
 
     socket.on('disconnect', (reason) => {
       logger.info('messages:socket_disconnected', { reason });
       state.socketAuthed = false;
+      startPolling('disconnect');
     });
   } catch (err) {
     logger.error('messages:socket_init_failed', err);
+    startPolling('init_exception');
   }
 };
 
@@ -805,6 +873,9 @@ const init = async () => {
     updateComposerState();
     updateConversationStatusText();
     updateTypingIndicator();
+  }
+  if (!window.WS_AUTH) {
+    startPolling('no_auth_token');
   }
   initSocket();
 };
