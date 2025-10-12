@@ -18,6 +18,7 @@ const TYPING_DISPLAY_TIMEOUT_MS = 6000;
 const TYPING_BROADCAST_THROTTLE_MS = 1200;
 const POLL_THREADS_INTERVAL_MS = 15000;
 const POLL_CONVERSATION_INTERVAL_MS = 6000;
+const MESSAGE_DELETE_WINDOW_MS = 30000;
 
 const state = {
   meId: Number(window.ME_USER_ID || 0) || null,
@@ -38,6 +39,8 @@ const state = {
   polling: { active: false, threadsTimer: null, conversationTimer: null },
   fetchingThreads: false,
   fetchingConversation: new Set(),
+  deleteExpiryTimers: new Map(),
+  clearingConversation: false,
 };
 
 const escapeHtml = (value) => (value === null || value === undefined)
@@ -92,6 +95,51 @@ const scrollMessagesToBottom = () => {
   requestAnimationFrame(() => {
     messagesArea.scrollTop = messagesArea.scrollHeight;
   });
+};
+
+const messageKey = (value) => {
+  if (value === null || value === undefined) return null;
+  return String(value);
+};
+
+const clearAllDeleteTimers = () => {
+  state.deleteExpiryTimers.forEach((timer) => clearTimeout(timer));
+  state.deleteExpiryTimers.clear();
+};
+
+const canDeleteMessageForEveryone = (msg) => {
+  if (!msg || Number(msg.sender_user_id) !== state.meId) return false;
+  const numericId = Number(msg.id);
+  if (!Number.isFinite(numericId) || numericId <= 0) return false;
+  const created = parseDate(msg.created_at || '');
+  if (!created) return false;
+  const ageMs = Date.now() - created.getTime();
+  return ageMs <= MESSAGE_DELETE_WINDOW_MS;
+};
+
+const scheduleDeleteExpiryCheck = (msg, key) => {
+  if (!key || !msg) return;
+  const created = parseDate(msg.created_at || '');
+  if (!created) return;
+  const expiryAt = created.getTime() + MESSAGE_DELETE_WINDOW_MS;
+  const now = Date.now();
+  if (expiryAt <= now) {
+    const existing = state.deleteExpiryTimers.get(key);
+    if (existing) {
+      clearTimeout(existing);
+      state.deleteExpiryTimers.delete(key);
+    }
+    return;
+  }
+  if (state.deleteExpiryTimers.has(key)) {
+    return;
+  }
+  const delay = Math.max(50, expiryAt - now + 50);
+  const timer = setTimeout(() => {
+    state.deleteExpiryTimers.delete(key);
+    renderMessages();
+  }, delay);
+  state.deleteExpiryTimers.set(key, timer);
 };
 
 const getChatStatusElement = () => {
@@ -277,6 +325,19 @@ const buildMessageMeta = (msg, createdText) => {
   return parts.join('<span class="message-meta-sep">•</span>');
 };
 
+const buildMessageActions = (msg) => {
+  if (!canDeleteMessageForEveryone(msg)) return '';
+  const numericId = Number(msg.id);
+  if (!Number.isFinite(numericId) || numericId <= 0) return '';
+  return `
+    <div class="message-actions">
+      <button type="button" class="message-action-btn message-action-delete" data-message-id="${numericId}" title="Delete message for everyone">
+        <i class="bi bi-trash"></i>
+        <span class="visually-hidden">Delete message for everyone</span>
+      </button>
+    </div>`;
+};
+
 const createPendingMessage = (body, clientRef) => {
   if (!clientRef) return;
   const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -380,6 +441,25 @@ const renderThreads = () => {
 const renderMessages = () => {
   if (!messagesList) return;
   sortMessagesChronologically();
+
+  const eligibleKeys = new Set();
+  state.messages.forEach((msg) => {
+    if (canDeleteMessageForEveryone(msg)) {
+      const key = messageKey(msg.id);
+      if (key) {
+        eligibleKeys.add(key);
+        scheduleDeleteExpiryCheck(msg, key);
+      }
+    }
+  });
+
+  state.deleteExpiryTimers.forEach((timer, key) => {
+    if (!eligibleKeys.has(key)) {
+      clearTimeout(timer);
+      state.deleteExpiryTimers.delete(key);
+    }
+  });
+
   if (!state.messages.length) {
     messagesEmpty?.classList.remove('d-none');
   } else {
@@ -394,15 +474,55 @@ const renderMessages = () => {
     const created = dt ? dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
     const metaHtml = buildMessageMeta(msg, created);
     const metaBlock = metaHtml ? `<div class="message-meta">${metaHtml}</div>` : '';
+    const actionsHtml = buildMessageActions(msg);
+    const contentClass = mine ? 'message-content message-content-me' : 'message-content message-content-other';
+    const rowDataId = escapeHtml(messageKey(msg.id) || '');
     return `
-      <div class="message-row ${mine ? 'align-items-end' : 'align-items-start'}">
-        <div class="${classes.join(' ')}">${escapeHtml(msg.body || '')}</div>
-        ${metaBlock}
+      <div class="message-row ${mine ? 'align-items-end' : 'align-items-start'}" data-message-id="${rowDataId}">
+        <div class="${contentClass}">
+          ${actionsHtml}
+          <div class="${classes.join(' ')}">${escapeHtml(msg.body || '')}</div>
+          ${metaBlock}
+        </div>
       </div>`;
   });
 
   messagesList.innerHTML = bubbles.join('');
   scrollMessagesToBottom();
+};
+
+const removeMessagesByIds = (ids) => {
+  if (!Array.isArray(ids) || !ids.length) return false;
+  const keys = new Set(ids.map((id) => messageKey(id)).filter((key) => key));
+  if (!keys.size) return false;
+
+  const beforeLength = state.messages.length;
+  state.messages = state.messages.filter((msg) => {
+    const key = messageKey(msg?.id);
+    return !key || !keys.has(key);
+  });
+
+  state.pendingMessages.forEach((value, clientRef) => {
+    const key = messageKey(value);
+    if (key && keys.has(key)) {
+      state.pendingMessages.delete(clientRef);
+    }
+  });
+
+  keys.forEach((key) => {
+    const timer = state.deleteExpiryTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      state.deleteExpiryTimers.delete(key);
+    }
+  });
+
+  const changed = state.messages.length !== beforeLength;
+  if (changed) {
+    renderMessages();
+    updateConversationStatusText();
+  }
+  return changed;
 };
 
 const updateComposerState = () => {
@@ -431,15 +551,28 @@ const renderConversationHeader = () => {
   }
 
   const { text: statusText } = computeConversationStatus();
+  const controls = [];
+  const hasThread = !!state.activeThreadId || state.messages.length > 0;
+  if (hasThread) {
+    controls.push(`
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="clearConversationBtn">
+        <i class="bi bi-eraser"></i>
+        <span class="d-none d-sm-inline ms-1">Clear my messages</span>
+      </button>`);
+  }
+  if (!state.messaging?.allowed) {
+    controls.push('<span class="badge text-bg-secondary">Messaging restricted</span>');
+  }
+  const controlsHtml = controls.length
+    ? `<div class="d-flex align-items-center gap-2 flex-wrap justify-content-md-end">${controls.join('')}</div>`
+    : '';
   chatHeader.innerHTML = `
     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
       <div>
         <h2 class="h5 mb-0">Chat with ${escapeHtml(other.display_name || 'Member')}</h2>
         ${other.username ? `<div class="text-secondary">@${escapeHtml(other.username)}</div>` : ''}
       </div>
-      ${state.messaging?.allowed
-        ? ''
-        : `<span class="badge text-bg-secondary">Messaging restricted</span>`}
+      ${controlsHtml}
     </div>
     <div class="text-secondary small" id="chatStatus">${escapeHtml(statusText)}</div>`;
   updateConversationStatusText();
@@ -509,6 +642,7 @@ const fetchConversation = async (userId, options = {}) => {
     if (!data?.ok) throw new Error(data?.error || 'Unable to load conversation');
 
     state.pendingMessages.clear();
+    clearAllDeleteTimers();
     state.activeUserId = targetId;
     state.activeOtherUser = data.other_user || null;
     state.messaging = data.messaging || { allowed: false, reason: '' };
@@ -612,6 +746,102 @@ const sendMessage = async (body) => {
       messageInput.focus();
     }
     showMessageAlert(err.message || 'Unable to send message.');
+  }
+};
+
+const deleteMessageById = async (messageId) => {
+  const numericId = Number(messageId);
+  if (!Number.isFinite(numericId) || numericId <= 0) return;
+  if (!state.activeUserId) return;
+  const confirmed = window.confirm('Delete this message for everyone? You can only undo a message within 30 seconds.');
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`${state.apiBase}/messages.php`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ csrf: state.csrf, message_id: numericId }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      const reason = data?.reason || data?.error || 'Unable to delete message.';
+      throw new Error(reason);
+    }
+
+    const deletedIds = Array.isArray(data.deleted_message_ids) ? data.deleted_message_ids : [];
+    let removed = false;
+    if (deletedIds.length) {
+      removed = removeMessagesByIds(deletedIds);
+    }
+    if (!removed) {
+      await fetchConversation(state.activeUserId, { preserveTyping: true, preservePending: true, skipIfBusy: true });
+    }
+
+    if (data.thread) {
+      upsertThread(data.thread);
+      renderThreads();
+      renderConversationHeader();
+    }
+    clearMessageAlert();
+  } catch (err) {
+    logger.error('messages:delete_failed', err);
+    showMessageAlert(err.message || 'Unable to delete message.');
+  }
+};
+
+const clearMyMessages = async () => {
+  if (!state.activeUserId || state.clearingConversation) {
+    return;
+  }
+
+  const hasMine = state.messages.some((msg) => msg.sender_user_id === state.meId);
+  if (!hasMine) {
+    showMessageAlert('You have no messages to clear in this conversation.');
+    return;
+  }
+
+  const confirmClear = window.confirm('Clear all messages you have sent in this conversation? This removes them for everyone.');
+  if (!confirmClear) return;
+
+  state.clearingConversation = true;
+  const clearButton = document.getElementById('clearConversationBtn');
+  if (clearButton) {
+    clearButton.disabled = true;
+  }
+  try {
+    const res = await fetch(`${state.apiBase}/messages.php`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ csrf: state.csrf, action: 'clear', user_id: state.activeUserId }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      const reason = data?.reason || data?.error || 'Unable to clear your messages.';
+      throw new Error(reason);
+    }
+
+    const deletedIds = Array.isArray(data.deleted_message_ids) ? data.deleted_message_ids : [];
+    const removed = deletedIds.length ? removeMessagesByIds(deletedIds) : false;
+    if (!removed) {
+      await fetchConversation(state.activeUserId, { preserveTyping: true, preservePending: true, skipIfBusy: true });
+    }
+
+    if (data.thread) {
+      upsertThread(data.thread);
+      renderThreads();
+    }
+    renderConversationHeader();
+    clearMessageAlert();
+  } catch (err) {
+    logger.error('messages:clear_failed', err);
+    showMessageAlert(err.message || 'Unable to clear your messages.');
+  } finally {
+    state.clearingConversation = false;
+    if (clearButton) {
+      clearButton.disabled = false;
+    }
   }
 };
 
@@ -743,6 +973,33 @@ const handleSocketRead = (payload) => {
   }
 };
 
+const handleSocketDelete = async (payload) => {
+  if (!payload?.target_user_ids || !Array.isArray(payload.target_user_ids)) return;
+  if (!payload.target_user_ids.includes(state.meId)) return;
+
+  const ids = Array.isArray(payload.deleted_message_ids)
+    ? payload.deleted_message_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+    : [];
+  let removed = false;
+  if (ids.length) {
+    removed = removeMessagesByIds(ids);
+  }
+
+  const thread = applyThreadFromPayload(payload);
+  if (thread) {
+    upsertThread(thread);
+    renderThreads();
+  }
+
+  const payloadThreadId = Number(payload.thread_id || 0);
+  if (payloadThreadId && payloadThreadId === state.activeThreadId) {
+    renderConversationHeader();
+    if (!removed) {
+      await fetchConversation(state.activeUserId, { preserveTyping: true, preservePending: true, skipIfBusy: true });
+    }
+  }
+};
+
 const stopPolling = () => {
   if (!state.polling.active) return;
   logger.info('messages:polling_stop', {});
@@ -810,6 +1067,10 @@ const initSocket = () => {
       handleSocketRead(payload);
     });
 
+    socket.on('dm:delete', (payload) => {
+      handleSocketDelete(payload);
+    });
+
     socket.on('connect_error', (err) => {
       logger.warn('messages:socket_connect_error', err);
       startPolling('connect_error');
@@ -863,6 +1124,24 @@ if (messageInput) {
     stopSelfTyping();
   });
 }
+
+if (messagesList) {
+  messagesList.addEventListener('click', (event) => {
+    const button = event.target.closest('.message-action-delete');
+    if (!button) return;
+    event.preventDefault();
+    const messageId = Number(button.dataset.messageId || 0);
+    if (!Number.isFinite(messageId) || messageId <= 0) return;
+    deleteMessageById(messageId);
+  });
+}
+
+document.addEventListener('click', (event) => {
+  const clearBtn = event.target.closest('#clearConversationBtn');
+  if (!clearBtn) return;
+  event.preventDefault();
+  clearMyMessages();
+});
 
 const init = async () => {
   await fetchThreads({ keepSelection: true });

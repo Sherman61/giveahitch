@@ -52,6 +52,7 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
     .message-row {
       display: flex;
       flex-direction: column;
+      position: relative;
     }
     .message-bubble {
       display: inline-block;
@@ -60,6 +61,61 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
       max-width: 80%;
       box-shadow: 0 4px 12px rgba(15, 64, 128, 0.08);
       background: #fff;
+    }
+    .message-content {
+      position: relative;
+      display: inline-flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      align-items: flex-start;
+    }
+    .message-content-other {
+      align-items: flex-start;
+    }
+    .message-content-me {
+      align-items: flex-end;
+    }
+    .message-actions {
+      position: absolute;
+      top: -0.75rem;
+      right: 0;
+      display: flex;
+      gap: 0.25rem;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .message-content-other .message-actions {
+      left: 0;
+      right: auto;
+    }
+    .message-row:hover .message-actions,
+    .message-row:focus-within .message-actions {
+      opacity: 1;
+    }
+    .message-action-btn {
+      border: none;
+      background-color: rgba(13, 110, 253, 0.12);
+      color: #0d6efd;
+      border-radius: 999px;
+      width: 1.75rem;
+      height: 1.75rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .message-content-me .message-action-btn {
+      background-color: rgba(255, 255, 255, 0.65);
+      color: #084298;
+    }
+    .message-action-btn:hover,
+    .message-action-btn:focus-visible {
+      background-color: rgba(13, 110, 253, 0.2);
+      color: #0b5ed7;
+    }
+    .message-content-me .message-meta {
+      align-self: flex-end;
+      text-align: right;
     }
     .message-bubble.me {
       margin-left: auto;

@@ -171,4 +171,95 @@ if ($method === 'POST') {
     ]);
 }
 
+if ($method === 'DELETE') {
+    $input = assert_csrf_and_get_input();
+    $messageId = isset($input['message_id']) ? (int)$input['message_id'] : 0;
+    $otherId = isset($input['user_id']) ? (int)$input['user_id'] : 0;
+    $action = isset($input['action']) ? (string)$input['action'] : '';
+
+    if ($messageId > 0) {
+        try {
+            $result = \App\Messages\delete_message($pdo, $messageId, $uid, 30);
+        } catch (RuntimeException $e) {
+            send_json(422, ['ok' => false, 'error' => 'validation', 'reason' => $e->getMessage()]);
+        } catch (PDOException $e) {
+            send_json(500, ['ok' => false, 'error' => 'db', 'reason' => 'Unable to delete message.']);
+        }
+
+        $threadRow = $result['thread'] ?? null;
+        $otherUserId = (int)($result['other_user_id'] ?? 0);
+
+        $threadForSender = $threadRow ? \App\Messages\hydrate_thread($pdo, $threadRow, $uid) : null;
+        $threadForRecipient = ($threadRow && $otherUserId)
+            ? \App\Messages\hydrate_thread($pdo, $threadRow, $otherUserId)
+            : null;
+
+        if ($otherUserId > 0) {
+            \App\WS\broadcast('dm:delete', [
+                'thread_id' => $threadRow['id'] ?? null,
+                'deleted_message_ids' => [$messageId],
+                'initiator_id' => $uid,
+                'target_user_ids' => [$uid, $otherUserId],
+                'thread_for_sender' => $threadForSender,
+                'thread_for_recipient' => $threadForRecipient,
+            ], [
+                'user:' . $uid,
+                'user:' . $otherUserId,
+            ]);
+        }
+
+        send_json(200, [
+            'ok' => true,
+            'deleted_message_ids' => [$messageId],
+            'thread' => $threadForSender,
+        ]);
+    }
+
+    if ($action === 'clear' && $otherId > 0) {
+        $target = fetch_target($pdo, $otherId);
+        if (!$target) {
+            send_json(404, ['ok' => false, 'error' => 'not_found']);
+        }
+
+        try {
+            $result = \App\Messages\clear_user_messages($pdo, $uid, $otherId);
+        } catch (RuntimeException $e) {
+            send_json(422, ['ok' => false, 'error' => 'validation', 'reason' => $e->getMessage()]);
+        } catch (PDOException $e) {
+            send_json(500, ['ok' => false, 'error' => 'db', 'reason' => 'Unable to clear messages.']);
+        }
+
+        $deletedIds = array_map(static fn ($value): int => (int)$value, $result['deleted_ids'] ?? []);
+        $threadRow = $result['thread'] ?? null;
+
+        $threadForSender = $threadRow ? \App\Messages\hydrate_thread($pdo, $threadRow, $uid) : null;
+        $threadForRecipient = ($threadRow && $otherId)
+            ? \App\Messages\hydrate_thread($pdo, $threadRow, $otherId)
+            : null;
+
+        if ($deletedIds) {
+            \App\WS\broadcast('dm:delete', [
+                'thread_id' => $threadRow['id'] ?? null,
+                'deleted_message_ids' => $deletedIds,
+                'initiator_id' => $uid,
+                'reason' => 'clear',
+                'target_user_ids' => [$uid, $otherId],
+                'thread_for_sender' => $threadForSender,
+                'thread_for_recipient' => $threadForRecipient,
+            ], [
+                'user:' . $uid,
+                'user:' . $otherId,
+            ]);
+        }
+
+        send_json(200, [
+            'ok' => true,
+            'deleted_message_ids' => $deletedIds,
+            'thread' => $threadForSender,
+        ]);
+    }
+
+    send_json(422, ['ok' => false, 'error' => 'validation', 'reason' => 'Invalid delete request.']);
+}
+
 send_json(405, ['ok' => false, 'error' => 'method']);
