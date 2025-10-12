@@ -244,7 +244,13 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
 
   socket.on('connect', () => {
     console.log('[ws] connected', socket.id);
-    socket.emit('auth', { token: window.WS_TOKEN }, (resp) => {
+    const auth = window.WS_AUTH || null;
+    const token = auth && typeof auth.token === 'string' ? auth.token : null;
+    if (!token) {
+      console.warn('[ws] missing auth token, skipping auth');
+      return;
+    }
+    socket.emit('auth', { token }, (resp) => {
       console.log('[ws] auth result', resp);
     });
   });
