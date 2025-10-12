@@ -30,7 +30,7 @@ error_reporting(E_ALL);
     </a>
     <div class="ms-auto d-flex align-items-center gap-2">
       <span class="navbar-text small text-muted d-none d-md-inline">
-        <i class="bi bi-person-circle me-1"></i><?= htmlspecialchars($user['display_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+        <?= htmlspecialchars($user['display_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>
        <a class="btn btn-outline-secondary btn-sm" href="user.php?id=<?= (int)$me['id'] ?>"
        title="View profile" aria-label="View profile">
       <i class="bi bi-person-circle me-1"></i>
