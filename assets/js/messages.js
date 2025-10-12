@@ -614,6 +614,9 @@ const authenticateSocket = (socket) => {
         return;
       }
       state.socketAuthed = true;
+      logger.info('messages:socket_auth_ok', {
+        rooms: Array.isArray(response.rooms) ? response.rooms : undefined,
+      });
     });
   } catch (err) {
     logger.warn('messages:socket_auth_error', err);
@@ -726,6 +729,7 @@ const initSocket = () => {
     state.socket = socket;
 
     socket.on('connect', () => {
+      logger.info('messages:socket_connected', { id: socket.id || null });
       authenticateSocket(socket);
     });
 
@@ -745,7 +749,8 @@ const initSocket = () => {
       logger.warn('messages:socket_connect_error', err);
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      logger.info('messages:socket_disconnected', { reason });
       state.socketAuthed = false;
     });
   } catch (err) {
