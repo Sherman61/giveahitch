@@ -53,10 +53,34 @@ if ($method === 'GET') {
 
         $formattedThread = null;
         $messages = [];
+        $readBroadcast = null;
+
         if ($thread) {
             $formattedThread = \App\Messages\hydrate_thread($pdo, $thread, $uid);
             $messages = \App\Messages\fetch_messages($pdo, (int)$thread['id'], 100);
-            \App\Messages\mark_thread_read($pdo, $thread, $uid);
+            $readInfo = \App\Messages\mark_thread_read($pdo, $thread, $uid);
+            if (!empty($readInfo['messages'])) {
+                $readMessages = array_map(static function (array $msg): array {
+                    return [
+                        'id' => (int)$msg['id'],
+                        'read_at' => $msg['read_at'],
+                    ];
+                }, $readInfo['messages']);
+                $readBroadcast = [
+                    'thread_id' => (int)$thread['id'],
+                    'reader_id' => $uid,
+                    'recipient_id' => (int)$target['id'],
+                    'message_ids' => array_map(static fn (array $msg): int => (int)$msg['id'], $readMessages),
+                    'messages' => $readMessages,
+                ];
+            }
+        }
+
+        if ($readBroadcast) {
+            \App\WS\broadcast('dm:read', $readBroadcast, [
+                'user:' . $uid,
+                'user:' . (int)$target['id'],
+            ]);
         }
 
         send_json(200, [
@@ -85,6 +109,10 @@ if ($method === 'POST') {
     $input = assert_csrf_and_get_input();
     $recipientId = (int)($input['recipient_id'] ?? $input['user_id'] ?? 0);
     $body = (string)($input['body'] ?? '');
+    $clientRef = isset($input['client_ref']) ? (string)$input['client_ref'] : null;
+    if ($clientRef !== null && strlen($clientRef) > 100) {
+        $clientRef = substr($clientRef, 0, 100);
+    }
 
     if ($recipientId <= 0) {
         send_json(422, ['ok' => false, 'error' => 'validation', 'fields' => ['recipient_id' => 'Select someone to message.']]);
@@ -124,6 +152,7 @@ if ($method === 'POST') {
         'target_user_ids' => [$uid, $recipientId],
         'thread_for_sender' => $threadForSender,
         'thread_for_recipient' => $threadForRecipient,
+        'client_ref' => $clientRef,
     ], [
         'user:' . $uid,
         'user:' . $recipientId,
@@ -133,6 +162,7 @@ if ($method === 'POST') {
         'ok' => true,
         'thread' => $threadForSender,
         'message' => $message,
+        'client_ref' => $clientRef,
         'recipient' => [
             'id' => (int)$target['id'],
             'display_name' => $target['display_name'],

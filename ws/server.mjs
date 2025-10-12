@@ -96,6 +96,22 @@ io.on('connection', (socket) => {
     respond({ ok: true, userId: info.userId });
   });
 
+  socket.on('dm:typing', (payload = {}) => {
+    const senderId = socket.data.userId;
+    if (!senderId) return;
+    const recipientId = Number(payload.recipient_id || payload.user_id || 0);
+    if (!Number.isFinite(recipientId) || recipientId <= 0) return;
+    const threadId = Number(payload.thread_id || 0);
+    const typingPayload = {
+      sender_id: senderId,
+      recipient_id: recipientId,
+      thread_id: Number.isFinite(threadId) && threadId > 0 ? threadId : null,
+      typing: !!payload.typing,
+      timestamp: new Date().toISOString(),
+    };
+    socket.to(`user:${recipientId}`).emit('dm:typing', typingPayload);
+  });
+
   socket.on('disconnect', (reason) => {
     console.log(`[io] disconnect ${socket.id} (${reason})`);
   });

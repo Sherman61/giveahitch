@@ -70,6 +70,52 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
       font-size: 0.75rem;
       color: #6c757d;
       margin-top: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .message-meta .message-meta-sep {
+      color: rgba(0, 0, 0, 0.25);
+      font-size: 0.6rem;
+    }
+    .message-meta .message-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .message-meta .message-status i {
+      font-size: 1rem;
+    }
+    .message-meta .message-status.pending i {
+      color: #6c757d;
+      opacity: 0.75;
+    }
+    .message-meta .message-status.delivered i {
+      color: #6c757d;
+    }
+    .message-meta .message-status.seen i {
+      color: #0d6efd;
+    }
+    .typing-indicator {
+      margin-top: 0.5rem;
+      color: #0d6efd;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .typing-indicator::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background-color: currentColor;
+      animation: typing-pulse 1s ease-in-out infinite;
+    }
+    @keyframes typing-pulse {
+      0% { opacity: 0.25; transform: scale(0.85); }
+      50% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0.25; transform: scale(0.85); }
     }
     .messages-empty {
       color: #6c757d;
@@ -112,6 +158,7 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
           <div id="messagesArea" class="messages-area d-flex flex-column">
             <div id="messagesEmpty" class="messages-empty">No messages yet.</div>
             <div id="messagesList" class="vstack gap-3"></div>
+            <div id="typingIndicator" class="typing-indicator d-none" aria-live="polite"></div>
           </div>
           <form id="messageForm" class="mt-3">
             <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
