@@ -26,6 +26,22 @@ $note   = trim((string)($in['note'] ?? ''));
 $phone  = trim((string)($in['phone'] ?? ''));
 $wa     = trim((string)($in['whatsapp'] ?? ''));
 
+$normalizeDigits = static function (string $value): string {
+  return preg_replace('/\D+/', '', $value) ?? '';
+};
+
+$isValidPhone = static function (string $value) use ($normalizeDigits): bool {
+  if ($value === '') {
+    return true;
+  }
+  if (!preg_match('/^\+?[0-9\s\-()]+$/', $value)) {
+    return false;
+  }
+  $digits = $normalizeDigits($value);
+  $len = strlen($digits);
+  return $len >= 7 && $len <= 15;
+};
+
 $parseInputDate = static function (string $value): ?DateTimeImmutable {
   $value = trim($value);
   if ($value === '') {
@@ -67,6 +83,21 @@ $rideDt = $rideDtObj ? $rideDtObj->format('Y-m-d H:i:s') : null;
 $rideEndDt = $rideEndObj ? $rideEndObj->format('Y-m-d H:i:s') : null;
 
 if (!in_array($type, ['offer','request'], true) || $from==='' || $to==='') {
+  http_response_code(422);
+  echo json_encode(['ok'=>false,'error'=>'validation']); exit;
+}
+
+if (mb_strlen($from) < 2 || mb_strlen($from) > 255 || mb_strlen($to) < 2 || mb_strlen($to) > 255) {
+  http_response_code(422);
+  echo json_encode(['ok'=>false,'error'=>'validation']); exit;
+}
+
+if (strcasecmp($from, $to) === 0) {
+  http_response_code(422);
+  echo json_encode(['ok'=>false,'error'=>'validation']); exit;
+}
+
+if (($phone === '' && $wa === '') || !$isValidPhone($phone) || !$isValidPhone($wa)) {
   http_response_code(422);
   echo json_encode(['ok'=>false,'error'=>'validation']); exit;
 }

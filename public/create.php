@@ -66,12 +66,12 @@ $csrf = \App\Auth\csrf_token();
               <div class="col-md-6">
                 <label class="form-label">From</label>
                 <input type="text" class="form-control" name="from_text" placeholder="Borough Park, Brooklyn, NY" required minlength="2" maxlength="255">
-                <div class="invalid-feedback">Enter a valid origin.</div>
+                <div class="invalid-feedback">Enter a valid origin. Origin and destination must be different.</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">To</label>
                 <input type="text" class="form-control" name="to_text" placeholder="Monsey, NY" required minlength="2" maxlength="255">
-                <div class="invalid-feedback">Enter a valid destination.</div>
+                <div class="invalid-feedback">Enter a valid destination. Origin and destination must be different.</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">Seats (0 = package)</label>
@@ -80,13 +80,13 @@ $csrf = \App\Auth\csrf_token();
               </div>
               <div class="col-md-6">
                 <label class="form-label">Phone</label>
-                <input type="tel" class="form-control" name="phone" placeholder="+1 718 555 1234" pattern="^\+?[0-9\s\-\(\)]{7,32}$">
-                <div class="invalid-feedback">Invalid phone.</div>
+                <input type="tel" class="form-control" name="phone" placeholder="+1 718 555 1234" inputmode="tel" pattern="^\+?[0-9\s\-\(\)]{7,20}$">
+                <div class="invalid-feedback">Enter a valid phone number (7-15 digits, optional spaces, parentheses or dashes).</div>
               </div>
               <div class="col-12">
                 <label class="form-label">WhatsApp (optional)</label>
-                <input type="tel" class="form-control" name="whatsapp" placeholder="+1 347 555 7890" pattern="^\+?[0-9\s\-\(\)]{7,32}$">
-                <div class="invalid-feedback">Invalid WhatsApp.</div>
+                <input type="tel" class="form-control" name="whatsapp" placeholder="+1 347 555 7890" inputmode="tel" pattern="^\+?[0-9\s\-\(\)]{7,20}$">
+                <div class="invalid-feedback">Enter a valid WhatsApp number (7-15 digits, optional spaces, parentheses or dashes).</div>
               </div>
               <div class="col-12">
                 <div id="savedContactHint" class="d-none small text-secondary">
@@ -120,6 +120,8 @@ const form = document.getElementById('rideForm');
 const alertBox = document.getElementById('formAlert');
 const savedContactHint = document.getElementById('savedContactHint');
 const fillBtn = document.getElementById('fillFromProfile');
+const fromInput = form.elements['from_text'];
+const toInput = form.elements['to_text'];
 const phoneInput = form.elements['phone'];
 const whatsappInput = form.elements['whatsapp'];
 const startInput = form.elements['ride_datetime'];
@@ -157,6 +159,42 @@ function hasContact(f){
   return (f.phone.value.trim() !== '' || f.whatsapp.value.trim() !== '');
 }
 
+function normalizeDigits(value){
+  return value.replace(/\D+/g, '');
+}
+
+function validatePhoneField(field){
+  if (!field) return true;
+  const value = field.value.trim();
+  field.setCustomValidity('');
+  if (value === '') return true;
+  const patternOk = /^\+?[0-9\s\-()]+$/.test(value);
+  const digits = normalizeDigits(value);
+  const digitsOk = digits.length >= 7 && digits.length <= 15;
+  if (!patternOk || !digitsOk) {
+    field.setCustomValidity('Please enter a valid phone number with 7-15 digits.');
+    return false;
+  }
+  return true;
+}
+
+function validateLocations(){
+  if (!fromInput || !toInput) return true;
+  const fromVal = fromInput.value.trim();
+  const toVal = toInput.value.trim();
+  fromInput.setCustomValidity('');
+  toInput.setCustomValidity('');
+  if (!fromVal || !toVal) return true;
+  const same = fromVal.localeCompare(toVal, undefined, {sensitivity: 'accent'}) === 0;
+  if (same) {
+    const msg = 'Origin and destination must be different.';
+    fromInput.setCustomValidity(msg);
+    toInput.setCustomValidity(msg);
+    return false;
+  }
+  return true;
+}
+
 function validateDateOrder(){
   if (!startInput || !endInput) return true;
   endInput.setCustomValidity('');
@@ -181,18 +219,35 @@ endInput?.addEventListener('change', () => {
   if (!ok) endInput.reportValidity();
 });
 
+fromInput?.addEventListener('input', validateLocations);
+toInput?.addEventListener('input', validateLocations);
+phoneInput?.addEventListener('input', () => validatePhoneField(phoneInput));
+whatsappInput?.addEventListener('input', () => validatePhoneField(whatsappInput));
+
 form.addEventListener('submit', async (e)=>{
   e.preventDefault();
   alertBox.className=''; alertBox.textContent='';
 
   // Built-in + custom contact requirement
+  const contactOk = hasContact(form);
   const datesOk = validateDateOrder();
-  if (!form.checkValidity() || !hasContact(form) || !datesOk) {
+  const locationsOk = validateLocations();
+  const phoneOk = validatePhoneField(phoneInput);
+  const whatsappOk = validatePhoneField(whatsappInput);
+
+  if (!form.checkValidity() || !contactOk || !datesOk || !locationsOk || !phoneOk || !whatsappOk) {
     e.stopPropagation();
     form.classList.add('was-validated');
-    if (!hasContact(form)) {
+    if (!contactOk) {
       alertBox.className='alert alert-warning';
       alertBox.textContent='Please provide at least one contact method (Phone or WhatsApp).';
+    } else if (!locationsOk) {
+      alertBox.className='alert alert-warning';
+      alertBox.textContent='The origin and destination must be different.';
+      fromInput?.reportValidity();
+    } else if (!phoneOk || !whatsappOk) {
+      alertBox.className='alert alert-warning';
+      alertBox.textContent='Phone numbers must contain 7-15 digits and can include spaces, parentheses or dashes.';
     } else if (!datesOk) {
       alertBox.className='alert alert-warning';
       alertBox.textContent='The end date & time must be after the start date & time.';
