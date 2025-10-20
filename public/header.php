@@ -25,12 +25,16 @@
       </a>
       <div class="ms-4 d-none d-md-flex align-items-center gap-3">
         <a class="nav-link px-0" href="/about.php">About</a>
-        <a class="nav-link px-0" href="/rate_rides.php">Rate rides</a>
+        <?php if ($currentUser): ?>
+          <a class="nav-link px-0" href="/rate_rides.php">Rate rides</a>
+        <?php endif; ?>
       </div>
       <div class="ms-auto d-flex align-items-center gap-3 flex-wrap justify-content-end">
         <div class="d-flex d-md-none align-items-center gap-2">
           <a class="btn btn-link btn-sm px-1" href="/about.php">About</a>
-          <a class="btn btn-link btn-sm px-1" href="/rate_rides.php">Rate rides</a>
+          <?php if ($currentUser): ?>
+            <a class="btn btn-link btn-sm px-1" href="/rate_rides.php">Rate rides</a>
+          <?php endif; ?>
         </div>
         <?php if ($currentUser): ?>
           <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
@@ -60,8 +64,9 @@
           </div>
         <?php else: ?>
           <div class="d-flex align-items-center gap-2">
-            <a class="btn btn-light border-0 shadow-sm rounded-circle p-0 d-flex align-items-center justify-content-center" style="width: 2.5rem; height: 2.5rem;" href="/login.php" title="Log in" aria-label="Log in">
+            <a class="btn btn-light border-0 shadow-sm rounded-pill d-flex align-items-center gap-2 px-3 py-2" href="/login.php" title="Log in" aria-label="Log in">
               <i class="bi bi-box-arrow-in-right text-primary fs-5"></i>
+              <span class="fw-semibold text-primary">Log in</span>
             </a>
             <a class="btn btn-primary rounded-pill" href="/signup.php" title="Sign up" aria-label="Sign up">
               <i class="bi bi-person-plus-fill me-2"></i>
