@@ -86,6 +86,8 @@ $bootstrap = [
             <div class="d-flex justify-content-between align-items-center mb-3">
               <div>
                 <h1 class="h4 mb-0">Notifications</h1>
+                <button data-notification-bell title="Enable notifications">🔔</button>
+
                 <div class="text-secondary small" id="notificationSubtitle">Stay up to date with your rides.</div>
               </div>
               <button class="btn btn-outline-primary btn-sm" id="markAllRead" type="button">

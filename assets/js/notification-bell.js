@@ -125,3 +125,4 @@ if (!badge || !userId) {
     }
   });
 }
+ 
