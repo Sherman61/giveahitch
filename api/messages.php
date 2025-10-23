@@ -36,6 +36,48 @@ function fetch_target(\PDO $pdo, int $userId): ?array
     return $row ?: null;
 }
 
+function resolve_sender_name(array $user): string
+{
+    if (!empty($user['display_name'])) {
+        return (string)$user['display_name'];
+    }
+    if (!empty($user['username'])) {
+        return (string)$user['username'];
+    }
+    if (!empty($user['email'])) {
+        return (string)$user['email'];
+    }
+    return 'Someone';
+}
+
+function message_preview(string $body, int $limit = 120): string
+{
+    $trimmed = trim($body);
+    if ($trimmed === '') {
+        return 'Open your messages to read it.';
+    }
+
+    $collapsed = preg_replace('/\s+/u', ' ', $trimmed);
+    if (is_string($collapsed) && $collapsed !== '') {
+        $trimmed = $collapsed;
+    }
+
+    if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+        if (mb_strlen($trimmed, 'UTF-8') <= $limit) {
+            return $trimmed;
+        }
+        $snippet = mb_substr($trimmed, 0, $limit, 'UTF-8');
+        return rtrim($snippet) . '…';
+    }
+
+    if (strlen($trimmed) <= $limit) {
+        return $trimmed;
+    }
+
+    $snippet = substr($trimmed, 0, $limit);
+    return rtrim($snippet) . '…';
+}
+
 if ($method === 'GET') {
     $otherId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
     if ($otherId > 0) {
@@ -143,6 +185,30 @@ if ($method === 'POST') {
     $message = $result['message'];
     $threadForSender = \App\Messages\hydrate_thread($pdo, $threadRow, $uid);
     $threadForRecipient = \App\Messages\hydrate_thread($pdo, $threadRow, $recipientId);
+
+    try {
+        $senderName = resolve_sender_name($me);
+        $hasRealName = !empty($me['display_name']) || !empty($me['username']) || !empty($me['email']);
+        $titleName = $hasRealName && $senderName !== '' ? $senderName : 'someone';
+        $preview = message_preview($message['body'] ?? '');
+        $metadata = [
+            'thread_id' => (int)($threadRow['id'] ?? 0),
+            'message_id' => (int)($message['id'] ?? 0),
+            'url' => '/messages.php?user_id=' . $uid,
+        ];
+
+        \App\Notifications\create($pdo, [
+            'user_id' => $recipientId,
+            'type' => 'message_received',
+            'title' => sprintf('New message from %s', $titleName),
+            'body' => $preview,
+            'actor_user_id' => $uid,
+            'actor_display_name' => $hasRealName ? $senderName : null,
+            'metadata' => $metadata,
+        ]);
+    } catch (\Throwable $notifyError) {
+        error_log('messages:notify_failed ' . $notifyError->getMessage());
+    }
 
     \App\WS\broadcast('dm:new', [
         'thread_id' => $threadForSender['id'],

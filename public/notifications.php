@@ -86,8 +86,18 @@ $bootstrap = [
             <div class="d-flex justify-content-between align-items-center mb-3">
               <div>
                 <h1 class="h4 mb-0">Notifications</h1>
-                <button data-notification-bell title="Enable notifications">🔔</button>
-
+                <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                  <button
+                    class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-2"
+                    data-notification-bell
+                    type="button"
+                    title="Enable push notifications"
+                  >
+                    <i data-icon class="bi bi-bell"></i>
+                    <span data-label>Enable push notifications</span>
+                  </button>
+                  <span class="small text-secondary d-none" data-push-status role="status" aria-live="polite"></span>
+                </div>
                 <div class="text-secondary small" id="notificationSubtitle">Stay up to date with your rides.</div>
               </div>
               <button class="btn btn-outline-primary btn-sm" id="markAllRead" type="button">

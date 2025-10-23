@@ -1,82 +1,111 @@
 <?php
-// api/push_subscriptions.php
 declare(strict_types=1);
 
-session_start();
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
-require_once __DIR__ . '/../vendor/autoload.php';
-$config = require __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../lib/session.php';
+require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../config/db.php';
 
-// Your app's DB bootstrap should provide $pdo (PDO connected to your DB).
-// If your project uses a different include, change this next line accordingly.
-require_once __DIR__ . '/../db.php';
+\App\Auth\start_secure_session();
+$user = \App\Auth\require_login();
+$uid = (int)($user['id'] ?? 0);
+$pdo = db();
+$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-// Basic CSRF util
-function csrf_valid(?string $token): bool {
-    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], (string)$token);
-}
-
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$input = json_decode(file_get_contents('php://input') ?: '[]', true);
-$csrf  = $input['csrf'] ?? ($_POST['csrf'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null));
-
-if (!csrf_valid($csrf)) {
-    http_response_code(422);
-    echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token']);
+/**
+ * Emit a JSON response and terminate.
+ */
+function push_send_json(int $status, array $payload): void
+{
+    http_response_code($status);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-$userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+function push_trim_user_agent(?string $ua): ?string
+{
+    if ($ua === null) {
+        return null;
+    }
+    $ua = trim($ua);
+    if ($ua === '') {
+        return null;
+    }
+    if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+        if (mb_strlen($ua, 'UTF-8') > 255) {
+            return mb_substr($ua, 0, 255, 'UTF-8');
+        }
+        return $ua;
+    }
+    if (strlen($ua) > 255) {
+        return substr($ua, 0, 255);
+    }
+    return $ua;
+}
 
 try {
     if ($method === 'POST') {
-        // Expect: {endpoint, keys:{p256dh, auth}, ua?}
-        $endpoint = $input['endpoint'] ?? null;
-        $keys     = $input['keys'] ?? [];
-        $p256dh   = $keys['p256dh'] ?? null;
-        $auth     = $keys['auth'] ?? null;
-        $ua       = $_SERVER['HTTP_USER_AGENT'] ?? ($input['ua'] ?? null);
+        $input = \App\Auth\assert_csrf_and_get_input();
+        $endpoint = isset($input['endpoint']) ? trim((string)$input['endpoint']) : '';
+        $keys = isset($input['keys']) && is_array($input['keys']) ? $input['keys'] : [];
+        $p256dh = isset($keys['p256dh']) ? trim((string)$keys['p256dh']) : '';
+        $auth = isset($keys['auth']) ? trim((string)$keys['auth']) : '';
+        $ua = isset($input['ua']) ? (string)$input['ua'] : ($_SERVER['HTTP_USER_AGENT'] ?? null);
+        $ua = push_trim_user_agent(is_string($ua) ? $ua : null);
 
-        if (!$endpoint || !$p256dh || !$auth) {
-            http_response_code(400);
-            echo json_encode(['ok' => false, 'error' => 'Missing subscription fields']);
-            exit;
+        if ($endpoint === '' || $p256dh === '' || $auth === '') {
+            push_send_json(422, [
+                'ok' => false,
+                'error' => 'validation',
+                'reason' => 'Missing subscription fields.',
+            ]);
         }
 
         $sql = 'INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, ua)
-                VALUES (:user_id, :endpoint, :p256dh, :auth, :ua)
-                ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), p256dh=VALUES(p256dh), auth=VALUES(auth), ua=VALUES(ua)';
+                VALUES (:uid, :endpoint, :p256dh, :auth, :ua)
+                ON DUPLICATE KEY UPDATE user_id = VALUES(user_id),
+                                        p256dh = VALUES(p256dh),
+                                        auth = VALUES(auth),
+                                        ua = VALUES(ua)';
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
-            ':user_id'  => $userId,
+            ':uid' => $uid > 0 ? $uid : null,
             ':endpoint' => $endpoint,
-            ':p256dh'   => $p256dh,
-            ':auth'     => $auth,
-            ':ua'       => $ua,
+            ':p256dh' => $p256dh,
+            ':auth' => $auth,
+            ':ua' => $ua,
         ]);
 
-        echo json_encode(['ok' => true]);
-        exit;
+        push_send_json(200, ['ok' => true]);
     }
 
     if ($method === 'DELETE') {
-        $endpoint = $input['endpoint'] ?? null;
-        if (!$endpoint) {
-            http_response_code(400);
-            echo json_encode(['ok' => false, 'error' => 'Missing endpoint']);
-            exit;
+        $input = \App\Auth\assert_csrf_and_get_input();
+        $endpoint = isset($input['endpoint']) ? trim((string)$input['endpoint']) : '';
+        if ($endpoint === '') {
+            push_send_json(422, [
+                'ok' => false,
+                'error' => 'validation',
+                'reason' => 'Missing endpoint.',
+            ]);
         }
-        $stmt = $pdo->prepare('DELETE FROM push_subscriptions WHERE endpoint = ?');
-        $stmt->execute([$endpoint]);
-        echo json_encode(['ok' => true]);
-        exit;
+
+        $stmt = $pdo->prepare('DELETE FROM push_subscriptions WHERE endpoint = :endpoint AND (user_id = :uid OR user_id IS NULL)');
+        $stmt->execute([
+            ':endpoint' => $endpoint,
+            ':uid' => $uid,
+        ]);
+
+        push_send_json(200, [
+            'ok' => true,
+            'deleted' => (int)$stmt->rowCount(),
+        ]);
     }
 
-    http_response_code(405);
     header('Allow: POST, DELETE');
-    echo json_encode(['ok' => false, 'error' => 'Method not allowed']);
+    push_send_json(405, ['ok' => false, 'error' => 'method_not_allowed']);
 } catch (Throwable $e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Server error']);
+    error_log('push_subscription:error ' . $e->getMessage());
+    push_send_json(500, ['ok' => false, 'error' => 'server_error']);
 }

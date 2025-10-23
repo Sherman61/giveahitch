@@ -7,6 +7,30 @@ const markAllBtn = document.getElementById('markAllRead');
 const settingsForm = document.getElementById('notificationSettings');
 const settingsSaved = document.getElementById('settingsSaved');
 const subtitleEl = document.getElementById('notificationSubtitle');
+const pushButton = document.querySelector('[data-notification-bell]');
+const pushStatusEl = document.querySelector('[data-push-status]');
+const pushButtonLabel = pushButton ? pushButton.querySelector('[data-label]') : null;
+const pushButtonIcon = pushButton ? pushButton.querySelector('[data-icon]') : null;
+const vapidMeta = typeof document !== 'undefined'
+  ? document.querySelector('meta[name="vapid-public-key"]')
+  : null;
+const vapidPublicKey = vapidMeta?.content?.trim() || '';
+const pushSupported = typeof window !== 'undefined'
+  && typeof Notification !== 'undefined'
+  && typeof navigator !== 'undefined'
+  && 'serviceWorker' in navigator
+  && 'PushManager' in window;
+
+const pushState = {
+  supported: pushSupported,
+  enabling: false,
+  subscribed: false,
+  permission: pushSupported && typeof Notification !== 'undefined'
+    ? Notification.permission
+    : 'denied',
+};
+
+let vapidKeyBytes = null;
 
 const API_BASE = typeof window.API_BASE === 'string' ? window.API_BASE : '/api';
 const csrfToken = window.CSRF_TOKEN || null;
@@ -22,6 +46,280 @@ const state = {
   loadingMore: false,
   savingSettings: false,
   marking: false,
+};
+
+const setPushStatus = (message, tone = 'secondary') => {
+  if (!pushStatusEl) return;
+  const text = message || '';
+  pushStatusEl.textContent = text;
+  pushStatusEl.classList.remove('text-secondary', 'text-success', 'text-danger');
+  const toneClass = tone === 'success'
+    ? 'text-success'
+    : tone === 'danger'
+      ? 'text-danger'
+      : 'text-secondary';
+  pushStatusEl.classList.add(toneClass);
+  pushStatusEl.classList.toggle('d-none', text === '');
+};
+
+const setPushButtonLabel = (text) => {
+  if (pushButtonLabel) {
+    pushButtonLabel.textContent = text;
+  } else if (pushButton) {
+    pushButton.textContent = text;
+  }
+};
+
+const setPushButtonIcon = (icon) => {
+  if (!pushButtonIcon) return;
+  const name = icon.startsWith('bi-') ? icon : `bi-${icon}`;
+  pushButtonIcon.className = `bi ${name}`;
+};
+
+const updatePushButtonState = () => {
+  if (!pushButton) return;
+
+  pushButton.classList.add('btn', 'btn-sm', 'd-inline-flex', 'align-items-center', 'gap-2');
+
+  if (!pushState.supported) {
+    pushButton.disabled = true;
+    pushButton.classList.remove('btn-outline-primary', 'btn-success');
+    pushButton.classList.add('btn-outline-secondary');
+    setPushButtonLabel('Push not supported');
+    setPushButtonIcon('bi-slash-circle');
+    return;
+  }
+
+  const permission = pushState.permission;
+
+  if (pushState.subscribed || permission === 'granted') {
+    pushButton.disabled = true;
+    pushButton.classList.remove('btn-outline-primary', 'btn-outline-secondary');
+    pushButton.classList.add('btn-success');
+    setPushButtonLabel('Push notifications on');
+    setPushButtonIcon('bi-check2-circle');
+    return;
+  }
+
+  if (permission === 'denied') {
+    pushButton.disabled = true;
+    pushButton.classList.remove('btn-outline-primary', 'btn-success');
+    pushButton.classList.add('btn-outline-secondary');
+    setPushButtonLabel('Push blocked');
+    setPushButtonIcon('bi-slash-circle');
+    return;
+  }
+
+  pushButton.disabled = pushState.enabling;
+  pushButton.classList.remove('btn-success', 'btn-outline-secondary');
+  pushButton.classList.add('btn-outline-primary');
+  setPushButtonLabel(pushState.enabling ? 'Enabling…' : 'Enable push notifications');
+  setPushButtonIcon('bi-bell');
+};
+
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = typeof atob === 'function' ? atob(base64) : window.atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    output[i] = raw.charCodeAt(i);
+  }
+  return output;
+};
+
+const getVapidApplicationServerKey = () => {
+  if (!vapidPublicKey) {
+    return null;
+  }
+  if (vapidKeyBytes) {
+    return vapidKeyBytes;
+  }
+  try {
+    vapidKeyBytes = urlBase64ToUint8Array(vapidPublicKey);
+  } catch (err) {
+    vapidKeyBytes = null;
+    logger.warn?.('notifications:vapid_key_invalid', err);
+  }
+  return vapidKeyBytes;
+};
+
+const encodeKey = (keyData) => {
+  if (!keyData) return '';
+  const bytes = keyData instanceof ArrayBuffer ? new Uint8Array(keyData) : keyData;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return typeof btoa === 'function' ? btoa(binary) : window.btoa(binary);
+};
+
+const saveSubscription = async (subscription) => {
+  if (!subscription) {
+    throw new Error('subscription_missing');
+  }
+  const json = typeof subscription.toJSON === 'function' ? subscription.toJSON() : null;
+  const endpoint = json?.endpoint || subscription.endpoint || '';
+  const keys = json?.keys || {};
+  let p256dh = keys.p256dh || '';
+  let auth = keys.auth || '';
+
+  if ((!p256dh || !auth) && typeof subscription.getKey === 'function') {
+    try {
+      if (!p256dh) {
+        const rawP256dh = subscription.getKey('p256dh');
+        if (rawP256dh) p256dh = encodeKey(new Uint8Array(rawP256dh));
+      }
+      if (!auth) {
+        const rawAuth = subscription.getKey('auth');
+        if (rawAuth) auth = encodeKey(new Uint8Array(rawAuth));
+      }
+    } catch (err) {
+      logger.warn?.('notifications:subscription_key_encode_failed', err);
+    }
+  }
+
+  if (!endpoint || !p256dh || !auth) {
+    throw new Error('subscription_missing_fields');
+  }
+
+  const userAgent = typeof navigator !== 'undefined' && navigator.userAgent
+    ? navigator.userAgent.slice(0, 255)
+    : null;
+
+  const payload = {
+    endpoint,
+    keys: {
+      p256dh,
+      auth,
+    },
+  };
+  if (userAgent) {
+    payload.ua = userAgent;
+  }
+
+  const resp = await fetch(`${API_BASE}/push_subscription.php`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-CSRF-Token': csrfToken || '',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!resp.ok) {
+    let detail = '';
+    try {
+      const data = await resp.json();
+      detail = data?.error || '';
+    } catch (err) {
+      detail = '';
+    }
+    throw new Error(`subscription_save_failed:${detail || resp.status}`);
+  }
+};
+
+const requestNotificationPermission = () => new Promise((resolve) => {
+  if (typeof Notification === 'undefined' || typeof Notification.requestPermission !== 'function') {
+    resolve('default');
+    return;
+  }
+  let settled = false;
+  const finish = (permission) => {
+    if (settled) return;
+    settled = true;
+    resolve(permission);
+  };
+  try {
+    const maybePromise = Notification.requestPermission((permission) => finish(permission));
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      maybePromise.then(finish).catch(() => finish('denied'));
+    }
+  } catch (err) {
+    logger.warn?.('notifications:permission_request_failed', err);
+    finish('denied');
+  }
+});
+
+const enablePushNotifications = async ({ requestPermission = true, silent = false } = {}) => {
+  if (!pushState.supported) {
+    return;
+  }
+
+  if (!silent) {
+    pushState.enabling = true;
+    updatePushButtonState();
+    setPushStatus('Enabling push notifications…', 'secondary');
+  }
+
+  try {
+    await navigator.serviceWorker.register('/notification-sw.js');
+    const registration = await navigator.serviceWorker.ready;
+
+    let permission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+
+    if (permission !== 'granted') {
+      if (!requestPermission) {
+        pushState.permission = permission;
+        return;
+      }
+      permission = await requestNotificationPermission();
+    }
+
+    pushState.permission = permission;
+
+    if (permission !== 'granted') {
+      if (!silent) {
+        const tone = permission === 'denied' ? 'danger' : 'secondary';
+        const message = permission === 'denied'
+          ? 'Notifications are blocked in your browser settings.'
+          : 'You can enable browser notifications to stay up to date.';
+        setPushStatus(message, tone);
+      }
+      return;
+    }
+
+    const applicationServerKey = getVapidApplicationServerKey();
+    if (!applicationServerKey) {
+      throw new Error('missing_vapid_key');
+    }
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+    }
+
+    if (!subscription) {
+      throw new Error('subscription_unavailable');
+    }
+
+    await saveSubscription(subscription);
+    pushState.subscribed = true;
+    pushState.permission = 'granted';
+
+    if (!silent) {
+      setPushStatus('Push notifications are enabled. We will alert you about new activity.', 'success');
+    }
+  } catch (err) {
+    if (err && err.name === 'NotAllowedError') {
+      pushState.permission = 'denied';
+    }
+    pushState.subscribed = false;
+    if (!silent) {
+      setPushStatus('We could not enable push notifications. Please try again later.', 'danger');
+    }
+    logger.warn?.('notifications:push_enable_failed', err);
+  } finally {
+    if (!silent) {
+      pushState.enabling = false;
+    }
+    updatePushButtonState();
+  }
 };
 
 const relativeFormatter = (typeof Intl !== 'undefined' && Intl.RelativeTimeFormat)
@@ -258,6 +556,32 @@ markAllBtn?.addEventListener('click', () => markNotifications({ all: true }));
 
 if (settingsForm) {
   settingsForm.addEventListener('change', () => saveSettings());
+}
+
+if (pushButton) {
+  updatePushButtonState();
+  if (!pushState.supported) {
+    setPushStatus('Push notifications are not supported by this browser.', 'danger');
+  } else if (pushState.permission === 'denied') {
+    setPushStatus('Notifications are blocked in your browser settings.', 'danger');
+  } else {
+    setPushStatus('');
+  }
+
+  pushButton.addEventListener('click', () => {
+    if (pushState.subscribed || pushState.enabling) {
+      return;
+    }
+    enablePushNotifications({ requestPermission: true, silent: false });
+  });
+
+  if (pushState.supported && pushState.permission === 'granted') {
+    enablePushNotifications({ requestPermission: false, silent: true }).catch((err) => {
+      logger.warn?.('notifications:push_sync_failed', err);
+    });
+  }
+} else if (!pushState.supported && pushStatusEl) {
+  setPushStatus('Push notifications are not supported by this browser.', 'danger');
 }
 
 window.addEventListener('notifications:new', (event) => {
