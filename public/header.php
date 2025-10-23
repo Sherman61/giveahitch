@@ -1,4 +1,19 @@
+
 <?php
+
+
+// Ensure session (for CSRF)
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Load config (reads .env)
+$config = require __DIR__ . '/../config/config.php';
+
+
   $currentUser = isset($me) && is_array($me) ? $me : null;
   $displayName = isset($currentUser['display_name']) && $currentUser['display_name'] !== ''
     ? (string)$currentUser['display_name']
@@ -17,6 +32,13 @@
       $nameInitial = 'U';
   }
 ?>
+
+<meta name="vapid-public-key" content="<?= htmlspecialchars($config['vapid']['public'], ENT_QUOTES) ?>">
+<meta name="csrf-token" content="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES) ?>">
+
+<!-- Client push script (we’ll add this file next) -->
+<script defer src="/assets/js/notification-bell.js"></script>
+
   <nav class="navbar navbar-expand-lg bg-body-tertiary mb-3">
     <div class="container align-items-center">
       <a class="navbar-brand d-flex align-items-center gap-2" href="/rides.php">

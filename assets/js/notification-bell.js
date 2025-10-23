@@ -1,46 +1,11 @@
-const getLogger = () => {
-  const globalScope = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : {});
-  const existing = globalScope && typeof globalScope.AppLogger === 'object' ? globalScope.AppLogger : null;
-  if (existing) {
-    return existing;
-  }
-
-  const consoleRef = typeof console !== 'undefined' ? console : {
-    log() {},
-    info() {},
-    warn() {},
-    error() {},
-    debug() {},
-  };
-
-  const createHandler = (method, fallback = 'log') => (...args) => {
-    const handler = consoleRef[method] || consoleRef[fallback] || (() => {});
-    handler.apply(consoleRef, args);
-  };
-
-  const fallbackLogger = {
-    debug: createHandler('debug'),
-    info: createHandler('info'),
-    warn: createHandler('warn'),
-    error: createHandler('error', 'warn'),
-    subscribe: () => () => {},
-  };
-
-  if (globalScope && typeof globalScope === 'object') {
-    globalScope.AppLogger = fallbackLogger;
-  }
-
-  return fallbackLogger;
-};
-
-const logger = getLogger();
+import logger from './utils/logger.js';
 
 const badge = document.getElementById('notificationsBadge');
 const userId = Number(window.ME_USER_ID || 0);
 const API_BASE = typeof window.API_BASE === 'string' ? window.API_BASE : '/api';
 
 if (!badge || !userId) {
-  logger.debug('notifications:bell_init_skip', { hasBadge: !!badge, userId });
+  logger.debug?.('notifications:bell_init_skip', { hasBadge: !!badge, userId });
 } else {
   const state = {
     unread: 0,
@@ -74,7 +39,7 @@ if (!badge || !userId) {
         updateBadge(data.unread_count);
       }
     } catch (err) {
-      logger.warn('notifications:summary_fetch_failed', err);
+      logger.warn?.('notifications:summary_fetch_failed', err);
     } finally {
       state.loading = false;
     }
@@ -85,7 +50,7 @@ if (!badge || !userId) {
       const event = new CustomEvent('notifications:new', { detail: payload });
       window.dispatchEvent(event);
     } catch (err) {
-      logger.warn('notifications:event_dispatch_failed', err);
+      logger.warn?.('notifications:event_dispatch_failed', err);
     }
   };
 
@@ -102,11 +67,11 @@ if (!badge || !userId) {
           state.socketAuthed = true;
         } else {
           state.socketAuthed = false;
-          logger.warn('notifications:socket_auth_failed', response);
+          logger.warn?.('notifications:socket_auth_failed', response);
         }
       });
     } catch (err) {
-      logger.warn('notifications:socket_auth_error', err);
+      logger.warn?.('notifications:socket_auth_error', err);
       state.socketAuthed = false;
     }
   };
@@ -121,17 +86,17 @@ if (!badge || !userId) {
     state.socket = socket;
 
     socket.on('connect', () => {
-      logger.info('notifications:socket_connected', { id: socket.id });
+      logger.info?.('notifications:socket_connected', { id: socket.id });
       authenticateSocket(socket);
     });
 
     socket.on('disconnect', (reason) => {
-      logger.info('notifications:socket_disconnected', { reason });
+      logger.info?.('notifications:socket_disconnected', { reason });
       state.socketAuthed = false;
     });
 
     socket.on('notification:new', (payload) => {
-      logger.debug('notifications:event_received', payload);
+      logger.debug?.('notifications:event_received', payload);
       if (payload && typeof payload.unread_count === 'number') {
         updateBadge(payload.unread_count);
       }
@@ -139,7 +104,7 @@ if (!badge || !userId) {
     });
 
     socket.on('connect_error', (err) => {
-      logger.warn('notifications:socket_connect_error', err);
+      logger.warn?.('notifications:socket_connect_error', err);
     });
   };
 
@@ -160,3 +125,4 @@ if (!badge || !userId) {
     }
   });
 }
+ 

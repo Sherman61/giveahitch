@@ -1,39 +1,4 @@
-const getLogger = () => {
-  const globalScope = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : {});
-  const existing = globalScope && typeof globalScope.AppLogger === 'object' ? globalScope.AppLogger : null;
-  if (existing) {
-    return existing;
-  }
-
-  const consoleRef = typeof console !== 'undefined' ? console : {
-    log() {},
-    info() {},
-    warn() {},
-    error() {},
-    debug() {},
-  };
-
-  const createHandler = (method, fallback = 'log') => (...args) => {
-    const handler = consoleRef[method] || consoleRef[fallback] || (() => {});
-    handler.apply(consoleRef, args);
-  };
-
-  const fallbackLogger = {
-    debug: createHandler('debug'),
-    info: createHandler('info'),
-    warn: createHandler('warn'),
-    error: createHandler('error', 'warn'),
-    subscribe: () => () => {},
-  };
-
-  if (globalScope && typeof globalScope === 'object') {
-    globalScope.AppLogger = fallbackLogger;
-  }
-
-  return fallbackLogger;
-};
-
-const logger = getLogger();
+import logger from './utils/logger.js';
 
 const listEl = document.getElementById('notificationList');
 const emptyEl = document.getElementById('notificationEmpty');
@@ -76,7 +41,7 @@ const formatRelativeTime = (isoString) => {
     if (absDiff < 86400 * 2) return relativeFormatter.format(Math.round(diff / 3600), 'hour');
     return relativeFormatter.format(Math.round(diff / 86400), 'day');
   } catch (err) {
-    logger.warn('notifications:relative_time_failed', err);
+    logger.warn?.('notifications:relative_time_failed', err);
     return '';
   }
 };
@@ -193,7 +158,7 @@ const markNotifications = async ({ ids = [], all = false }) => {
     }
     renderList();
   } catch (err) {
-    logger.warn('notifications:mark_failed', err);
+    logger.warn?.('notifications:mark_failed', err);
   } finally {
     state.marking = false;
   }
@@ -220,7 +185,7 @@ const fetchMore = async () => {
     state.nextCursor = data.next_cursor || null;
     renderList();
   } catch (err) {
-    logger.warn('notifications:load_more_failed', err);
+    logger.warn?.('notifications:load_more_failed', err);
   } finally {
     state.loadingMore = false;
     loadMoreBtn?.removeAttribute('aria-busy');
@@ -268,7 +233,7 @@ const saveSettings = async () => {
       setTimeout(() => settingsSaved.classList.add('d-none'), 2000);
     }
   } catch (err) {
-    logger.warn('notifications:settings_failed', err);
+    logger.warn?.('notifications:settings_failed', err);
   } finally {
     state.savingSettings = false;
   }
