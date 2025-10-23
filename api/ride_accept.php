@@ -6,12 +6,13 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/status.php';
+require_once __DIR__ . '/../lib/notifications.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
 use function App\Status\{from_db, to_db};
 
 start_secure_session();
-require_login(); 
+require_login();
 
 $in = $_POST ?: json_decode(file_get_contents('php://input'), true) ?: [];
 csrf_verify((string)($in['csrf'] ?? ''));
@@ -23,7 +24,7 @@ $pdo = db();
 $pdo->beginTransaction();
 
 // lock the ride to avoid races
-$stmt = $pdo->prepare("SELECT id, user_id, type, status FROM rides WHERE id=:id AND deleted=0 FOR UPDATE");
+$stmt = $pdo->prepare("SELECT id, user_id, type, status, from_text, to_text FROM rides WHERE id=:id AND deleted=0 FOR UPDATE");
 $stmt->execute([':id' => $rideId]);
 $r = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$r) { $pdo->rollBack(); http_response_code(404); echo json_encode(['ok'=>false,'error'=>'not_found']); exit; }
@@ -54,9 +55,25 @@ $ins->execute([
   ':p'   => $pass,
   ':status' => to_db('accepted'),
 ]);
+$matchId = (int)$pdo->lastInsertId();
 
 $pdo->prepare("UPDATE rides SET status=:status WHERE id=:id")->execute([':status'=>to_db('matched'), ':id' => $rideId]);
 
 $pdo->commit();
+
 echo json_encode(['ok'=>true]);
-?>
+
+try {
+  $actorName = trim((string)($me['display_name'] ?? ''));
+  $from = trim((string)($r['from_text'] ?? ''));
+  $to   = trim((string)($r['to_text'] ?? ''));
+  $summary = $from && $to ? "$from → $to" : ($from ?: $to ?: 'your ride');
+  $title = 'Your ride has a new match';
+  $body  = ($actorName !== '' ? $actorName : 'A member') . " joined $summary.";
+  \App\Notifications\notify_ride_owner($pdo, $r, $me, 'ride_match_joined', $title, $body, [
+    'match_id' => $matchId,
+    'status' => 'accepted',
+  ]);
+} catch (\Throwable $e) {
+  error_log('notifications:ride_accept ' . $e->getMessage());
+}

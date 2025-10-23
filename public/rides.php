@@ -2,10 +2,12 @@
 
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/ws.php';
 
 start_secure_session();
 $me   = \App\Auth\current_user();
 $csrf = \App\Auth\csrf_token();
+$wsToken = $me ? \App\WS\generate_token((int)$me['id']) : null;
 ?>
 <!doctype html>
 <html lang="en">
@@ -19,6 +21,8 @@ $csrf = \App\Auth\csrf_token();
     window.ME_USER_ID = <?= $me ? (int) $me['id'] : 'null' ?>;
     window.CSRF_TOKEN = <?= json_encode($csrf, JSON_UNESCAPED_SLASHES) ?>;
     window.API_BASE   = '/api';
+    window.WS_URL = <?= json_encode($_ENV['WS_URL'] ?? '') ?>;
+    window.WS_AUTH = <?= json_encode($wsToken ? ['userId' => (int)$me['id'], 'token' => $wsToken] : null, JSON_UNESCAPED_SLASHES) ?>;
   </script>
   <style>
     body {
@@ -264,6 +268,7 @@ $csrf = \App\Auth\csrf_token();
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+  <script type="module" src="/assets/js/notification-bell.js"></script>
   <script src="/assets/js/rides.js" type="module"></script>
 </body>
 </html>

@@ -48,6 +48,10 @@
               </div>
             </div>
             <div class="d-flex align-items-center gap-2">
+              <a class="btn btn-light border-0 shadow-sm rounded-circle p-0 position-relative d-flex align-items-center justify-content-center" style="width: 2.5rem; height: 2.5rem;" href="/notifications.php" title="Notifications" aria-label="Notifications">
+                <i class="bi bi-bell-fill text-primary fs-5"></i>
+                <span id="notificationsBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill text-bg-danger d-none">0<span class="visually-hidden"> unread notifications</span></span>
+              </a>
               <a class="btn btn-light border-0 shadow-sm rounded-circle p-0 d-flex align-items-center justify-content-center" style="width: 2.5rem; height: 2.5rem;" href="<?= htmlspecialchars($profileUrl, ENT_QUOTES) ?>" title="View profile" aria-label="View profile">
                 <i class="bi bi-person-fill text-primary fs-5"></i>
               </a>
