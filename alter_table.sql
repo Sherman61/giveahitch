@@ -101,3 +101,34 @@ CREATE TABLE IF NOT EXISTS user_messages (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 COMMIT;
+
+START TRANSACTION;
+
+CREATE TABLE IF NOT EXISTS notification_settings (
+  user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+  ride_activity TINYINT(1) NOT NULL DEFAULT 1,
+  match_activity TINYINT(1) NOT NULL DEFAULT 1,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_notification_settings_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  type VARCHAR(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  title VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  body TEXT COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  ride_id BIGINT UNSIGNED DEFAULT NULL,
+  match_id BIGINT UNSIGNED DEFAULT NULL,
+  actor_user_id BIGINT UNSIGNED DEFAULT NULL,
+  actor_display_name VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  metadata JSON DEFAULT NULL,
+  is_read TINYINT(1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  read_at TIMESTAMP NULL DEFAULT NULL,
+  KEY idx_notifications_user_created (user_id, created_at),
+  KEY idx_notifications_unread (user_id, is_read),
+  CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+COMMIT;
