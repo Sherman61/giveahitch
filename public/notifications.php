@@ -136,5 +136,6 @@ $bootstrap = [
   </div>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
   <script type="module" src="/assets/js/notifications.js"></script>
+   
 </body>
 </html>

@@ -97,5 +97,10 @@ $me = \App\Auth\current_user();
       </div>
     </section>
   </div>
+
+  <!-- include in header in future updates -->
+   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+  <script type="module" src="/assets/js/notification-bell.js"></script>
+  <script src="/assets/js/rides.js" type="module"></script>
 </body>
 </html>

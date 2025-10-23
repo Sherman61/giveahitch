@@ -37,7 +37,7 @@ $config = require __DIR__ . '/../config/config.php';
 <meta name="csrf-token" content="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES) ?>">
 
 <!-- Client push script (we’ll add this file next) -->
-<script defer src="/assets/js/notification-bell.js"></script>
+<script defer type="module" src="/assets/js/notification-bell.js"></script>
 
   <nav class="navbar navbar-expand-lg bg-body-tertiary mb-3">
     <div class="container align-items-center">
