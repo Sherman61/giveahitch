@@ -5,6 +5,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/notifications.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
 
@@ -20,7 +21,7 @@ $pdo = db();
 $pdo->beginTransaction();
 
 /* Lock ride and read it */
-$stmt = $pdo->prepare("SELECT id,user_id,type,status FROM rides WHERE id=:id AND deleted=0 FOR UPDATE");
+$stmt = $pdo->prepare("SELECT id,user_id,type,status,from_text,to_text FROM rides WHERE id=:id AND deleted=0 FOR UPDATE");
 $stmt->execute([':id'=>$rideId]);
 $ride = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$ride) { $pdo->rollBack(); http_response_code(404); echo json_encode(['ok'=>false,'error'=>'not_found']); exit; }
@@ -45,6 +46,7 @@ $ins = $pdo->prepare("
 ");
 try {
   $ins->execute([':rid'=>$rideId, ':d'=>$driver, ':p'=>$pass]);
+  $matchId = (int)$pdo->lastInsertId();
 } catch (\PDOException $e) {
   // duplicate or other error
   $pdo->rollBack();
@@ -55,4 +57,20 @@ try {
 }
 
 $pdo->commit();
+
+try {
+    $actorName = trim((string)($me['display_name'] ?? ''));
+    $from = trim((string)($ride['from_text'] ?? ''));
+    $to   = trim((string)($ride['to_text'] ?? ''));
+    $summary = $from && $to ? "$from → $to" : ($from ?: $to ?: 'your ride');
+    $title = 'New request for your ride';
+    $body  = ($actorName !== '' ? $actorName : 'A member') . " asked to join $summary.";
+    \App\Notifications\notify_ride_owner($pdo, $ride, $me, 'ride_match_requested', $title, $body, [
+        'match_id' => $matchId ?? null,
+        'status' => 'pending',
+    ]);
+} catch (\Throwable $e) {
+    error_log('notifications:match_create ' . $e->getMessage());
+}
+
 echo json_encode(['ok'=>true]);
