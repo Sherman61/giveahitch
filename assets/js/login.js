@@ -102,7 +102,7 @@ form.addEventListener('submit', async (e) => {
           url.searchParams.set('acceptRide', String(intent.rideId));
           return url.toString();
         })()
-      : '/my_rides.php';
+      : '/rides.php';
 
     setTimeout(()=>{ location.href = target; }, 600);
   } catch (err) {

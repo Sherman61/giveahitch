@@ -43,6 +43,8 @@ const state = {
   clearingConversation: false,
 };
 
+const isSocketReady = () => !!(state.socket && state.socket.connected && state.socketAuthed);
+
 const escapeHtml = (value) => (value === null || value === undefined)
   ? ''
   : String(value)
@@ -153,7 +155,7 @@ const computeConversationStatus = () => {
   }
 
   const otherId = Number(state.activeOtherUser.id || 0);
-  if (otherId && state.typingByUser.has(otherId)) {
+  if (otherId && state.typingByUser.has(otherId) && isSocketReady()) {
     const name = state.activeOtherUser.display_name || 'Member';
     return { text: `${name} is typing…`, highlight: true };
   }
@@ -187,7 +189,7 @@ const clearTypingTimerForUser = (userId) => {
 const updateTypingIndicator = () => {
   if (!typingIndicator) return;
   const other = state.activeOtherUser;
-  if (!other) {
+  if (!other || !isSocketReady()) {
     typingIndicator.classList.add('d-none');
     typingIndicator.textContent = '';
     return;
@@ -208,6 +210,7 @@ const setTypingForUser = (userId, isTyping) => {
   if (!userId) return;
   const currentlyTyping = state.typingByUser.has(userId);
   if (isTyping) {
+    if (!isSocketReady()) return;
     if (currentlyTyping) {
       state.typingByUser.set(userId, Date.now());
       clearTypingTimerForUser(userId);
@@ -236,6 +239,15 @@ const setTypingForUser = (userId, isTyping) => {
     state.typingByUser.delete(userId);
     clearTypingTimerForUser(userId);
   }
+  updateTypingIndicator();
+  updateConversationStatusText();
+  renderThreads();
+};
+
+const resetTypingState = () => {
+  state.typingTimers.forEach((timer) => clearTimeout(timer));
+  state.typingTimers.clear();
+  state.typingByUser.clear();
   updateTypingIndicator();
   updateConversationStatusText();
   renderThreads();
@@ -416,7 +428,7 @@ const renderThreads = () => {
     const isActive = state.activeThreadId === thread.id || state.activeUserId === other.id;
     const unread = Number(thread.unread_count || 0);
     const bodyPreview = last ? summarise(last.body || '') : 'No messages yet';
-    const otherTyping = other?.id && state.typingByUser.has(other.id);
+    const otherTyping = other?.id && state.typingByUser.has(other.id) && isSocketReady();
     const previewText = otherTyping ? 'Typing…' : bodyPreview;
     const previewClass = otherTyping ? 'text-primary small fw-semibold' : 'text-secondary small';
     const timestamp = last?.created_at || thread.last_message_at || thread.updated_at || thread.created_at;
@@ -1017,6 +1029,7 @@ const stopPolling = () => {
 const startPolling = (reason = 'unknown') => {
   if (state.polling.active) return;
   logger.info('messages:polling_start', { reason });
+  resetTypingState();
   state.polling.active = true;
   fetchThreads({ keepSelection: true, skipIfBusy: true });
   if (state.activeUserId) {
@@ -1079,6 +1092,8 @@ const initSocket = () => {
     socket.on('disconnect', (reason) => {
       logger.info('messages:socket_disconnected', { reason });
       state.socketAuthed = false;
+      stopSelfTyping(false);
+      resetTypingState();
       startPolling('disconnect');
     });
   } catch (err) {

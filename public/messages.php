@@ -233,55 +233,5 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
 <script type="module" src="/assets/js/messages.js"></script>
 
-<script>
- 
-(() => {
-  const socket = io(window.WS_URL || undefined, {
-    path: '/socket.io',
-    transports: ['websocket', 'polling'],
-    withCredentials: true,
-  });
-
-  socket.on('connect', () => {
-    console.log('[ws] connected', socket.id);
-    const auth = window.WS_AUTH || null;
-    const token = auth && typeof auth.token === 'string' ? auth.token : null;
-    if (!token) {
-      console.warn('[ws] missing auth token, skipping auth');
-      return;
-    }
-    socket.emit('auth', { token }, (resp) => {
-      console.log('[ws] auth result', resp);
-    });
-  });
-
-  socket.on('disconnect', (reason) => {
-    console.log('[ws] disconnect', reason);
-  });
-
-  // show typing UI when the OTHER party types
-  socket.on('dm:typing', (payload) => {
-    // payload = {sender_id, recipient_id, thread_id|null, typing, timestamp}
-    console.log('[typing]', payload);
-    // TODO: update your UI (e.g. show “User is typing…” for payload.sender_id)
-  });
-
-  // expose helpers to send typing
-  window.wsTypingStart = (recipientId, threadId=null) => {
-    socket.emit('dm:typing', {
-      recipient_id: Number(recipientId),
-      thread_id: threadId ? Number(threadId) : null,
-      typing: true
-    });
-  };
-  window.wsTypingStop = (recipientId, threadId=null) => {
-    socket.emit('dm:typing', {
-      recipient_id: Number(recipientId),
-      thread_id: threadId ? Number(threadId) : null,
-      typing: false
-    });
-  };
-})();
-</script>
 </body>
 </html>

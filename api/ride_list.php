@@ -52,8 +52,8 @@ try {
             }
         }
 
-        $sql .= " AND ((r.ride_end_datetime IS NOT NULL AND r.ride_end_datetime >= DATE_SUB(NOW(), INTERVAL 6 HOUR))
-                      OR (r.ride_end_datetime IS NULL AND (r.ride_datetime IS NULL OR r.ride_datetime >= DATE_SUB(NOW(), INTERVAL 6 HOUR))))";
+        $sql .= " AND ((r.ride_end_datetime IS NOT NULL AND r.ride_end_datetime >= DATE_SUB(NOW(), INTERVAL 48 HOUR))
+                      OR (r.ride_end_datetime IS NULL AND (r.ride_datetime IS NULL OR r.ride_datetime >= DATE_SUB(NOW(), INTERVAL 48 HOUR))))";
     }
 
     if ($type === 'offer' || $type === 'request') {
