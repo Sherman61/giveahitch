@@ -47,16 +47,10 @@ $config = require __DIR__ . '/../config/config.php';
       </a>
       <div class="ms-4 d-none d-md-flex align-items-center gap-3">
         <a class="nav-link px-0" href="/about.php">About</a>
-        <?php if ($currentUser): ?>
-          <a class="nav-link px-0" href="/rate_rides.php">Rate rides</a>
-        <?php endif; ?>
       </div>
       <div class="ms-auto d-flex align-items-center gap-3 flex-wrap justify-content-end">
         <div class="d-flex d-md-none align-items-center gap-2">
           <a class="btn btn-link btn-sm px-1" href="/about.php">About</a>
-          <?php if ($currentUser): ?>
-            <a class="btn btn-link btn-sm px-1" href="/rate_rides.php">Rate rides</a>
-          <?php endif; ?>
         </div>
         <?php if ($currentUser): ?>
           <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
@@ -73,6 +67,14 @@ $config = require __DIR__ . '/../config/config.php';
               <a class="btn btn-light border-0 shadow-sm rounded-circle p-0 position-relative d-flex align-items-center justify-content-center" style="width: 2.5rem; height: 2.5rem;" href="/notifications.php" title="Notifications" aria-label="Notifications">
                 <i class="bi bi-bell-fill text-primary fs-5"></i>
                 <span id="notificationsBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill text-bg-danger d-none">0<span class="visually-hidden"> unread notifications</span></span>
+              </a>
+              <a class="btn btn-light border-0 shadow-sm rounded-circle p-0 d-flex align-items-center justify-content-center" style="width: 2.5rem; height: 2.5rem;" href="/messages.php" title="Messages" aria-label="Messages">
+                <i class="bi bi-chat-dots-fill text-primary fs-5"></i>
+                <span class="visually-hidden">Messages</span>
+              </a>
+              <a class="btn btn-light border-0 shadow-sm rounded-circle p-0 d-flex align-items-center justify-content-center" style="width: 2.5rem; height: 2.5rem;" href="/rate_rides.php" title="Rate rides" aria-label="Rate rides">
+                <i class="bi bi-star-fill text-warning fs-5"></i>
+                <span class="visually-hidden">Rate rides</span>
               </a>
               <a class="btn btn-light border-0 shadow-sm rounded-circle p-0 d-flex align-items-center justify-content-center" style="width: 2.5rem; height: 2.5rem;" href="<?= htmlspecialchars($profileUrl, ENT_QUOTES) ?>" title="View profile" aria-label="View profile">
                 <i class="bi bi-person-fill text-primary fs-5"></i>

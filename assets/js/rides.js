@@ -150,17 +150,17 @@ const relativeTime = (date) => {
   return rtf.format(days, 'day');
 };
 
-const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
 
 const isExpired = (item) => {
   const now = Date.now();
   const rideEnd = parseDate(item?.ride_end_datetime || '');
   if (rideEnd) {
-    return rideEnd.getTime() < now - SIX_HOURS_MS;
+    return rideEnd.getTime() < now - FORTY_EIGHT_HOURS_MS;
   }
   const rideStart = parseDate(item?.ride_datetime || '');
   if (rideStart) {
-    return rideStart.getTime() < now - SIX_HOURS_MS;
+    return rideStart.getTime() < now - FORTY_EIGHT_HOURS_MS;
   }
   return false;
 };
