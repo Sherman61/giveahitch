@@ -19,17 +19,6 @@ try {
 
     $title = isset($input['title']) ? trim((string)$input['title']) : '';
     $body  = isset($input['body']) ? trim((string)$input['body']) : '';
-    $category = isset($input['category']) ? strtolower(trim((string)$input['category'])) : '';
-
-    if ($category === '') {
-        $category = 'social';
-    }
-
-    if (!preg_match('/^[a-z0-9_-]{3,32}$/', $category)) {
-        http_response_code(422);
-        echo json_encode(['ok' => false, 'error' => 'invalid_category']);
-        return;
-    }
 
     if ($title === '') {
         http_response_code(422);
@@ -68,7 +57,6 @@ try {
         'icon' => '/assets/img/icon-192.png',
         'badge' => '/assets/img/badge-72.png',
         'url' => '/notifications.php',
-        'category' => $category,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     if ($payload === false) {

@@ -44,16 +44,6 @@ $csrf  = \App\Auth\csrf_token();
             <label class="form-label fw-semibold" for="pushBody">Notification body <span class="text-secondary fw-normal">(optional)</span></label>
             <textarea id="pushBody" name="body" class="form-control" maxlength="280" placeholder="Share additional details that appear under the title."></textarea>
           </div>
-          <div>
-            <label class="form-label fw-semibold" for="pushCategory">Notification category</label>
-            <select id="pushCategory" name="category" class="form-select">
-              <option value="social" selected>Social updates</option>
-              <option value="service">Service alerts</option>
-              <option value="reminders">Reminders</option>
-              <option value="announcements">Announcements</option>
-            </select>
-            <div class="form-text">Browsers may show this category when users manage site notifications.</div>
-          </div>
           <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
           <div class="d-flex gap-3 align-items-center flex-wrap">
             <button id="pushSubmit" type="submit" class="btn btn-primary">
@@ -112,7 +102,6 @@ $csrf  = \App\Auth\csrf_token();
       const payload = {
         title,
         body: data.get('body')?.toString().trim() || '',
-        category: data.get('category')?.toString().trim() || 'social',
         csrf: data.get('csrf'),
       };
 
@@ -136,7 +125,6 @@ $csrf  = \App\Auth\csrf_token();
             no_subscribers: 'No devices are currently subscribed to push notifications.',
             config_missing: 'Push configuration is missing on the server.',
             invalid_vapid_config: 'The VAPID keys are not configured correctly.',
-            invalid_category: 'Select a valid notification category.',
           };
           const tone = errorCode === 'missing_title' || errorCode === 'no_subscribers' ? 'warning' : 'danger';
           const message = friendly[errorCode] || `Failed to send notification: ${errorCode}.`;
