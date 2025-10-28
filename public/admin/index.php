@@ -31,8 +31,9 @@ $csrf  = \App\Auth\csrf_token();
         <h1 class="h3 mb-1">Admin — Rides</h1>
         <p class="text-secondary mb-0">Manage live ride offers and requests across the platform.</p>
       </div>
-      <div class="ms-auto d-flex gap-2 align-items-center">
+      <div class="ms-auto d-flex gap-2 align-items-center flex-wrap justify-content-end">
         <span class="badge text-bg-light text-secondary">Signed in as <?= htmlspecialchars($admin['display_name'] ?? $admin['email'] ?? 'Admin', ENT_QUOTES, 'UTF-8') ?></span>
+        <a class="btn btn-outline-primary btn-sm" href="/admin/push.php"><i class="bi bi-broadcast-pin me-1"></i>Push notifications</a>
         <a class="btn btn-outline-secondary btn-sm" href="/rides.php"><i class="bi bi-arrow-left me-1"></i>Back to site</a>
       </div>
     </header>
