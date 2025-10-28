@@ -48,6 +48,9 @@ $intentQuery  = $intentRideId ? ('?acceptRide=' . $intentRideId) : '';
       <label class="form-label">Password</label>
       <input type="password" class="form-control" name="password" required autocomplete="current-password">
     </div>
+    <div class="text-end">
+      <a class="link-secondary" href="/forgot-password.php<?= $intentQuery ?>">Forgot password?</a>
+    </div>
     <button class="btn btn-primary w-100 py-2">Log in</button>
     <div class="text-center text-secondary">New here? <a href="/signup.php<?= $intentQuery ?>">Create an account</a></div>
   </form>

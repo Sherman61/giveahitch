@@ -244,6 +244,9 @@ CREATE TABLE `users` (
   `whatsapp` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `contact_privacy` tinyint NOT NULL DEFAULT '1',
   `message_privacy` tinyint NOT NULL DEFAULT '1',
+  `reset_token_hash` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `reset_token_expires_at` datetime DEFAULT NULL,
+  `reset_token_attempts` int NOT NULL DEFAULT '0',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -251,16 +254,16 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `email`, `password_hash`, `display_name`, `rides_offered_count`, `rides_requested_count`, `rides_given_count`, `rides_received_count`, `score`, `driver_rating_sum`, `driver_rating_count`, `passenger_rating_sum`, `passenger_rating_count`, `is_admin`, `username`, `phone`, `whatsapp`, `contact_privacy`, `message_privacy`, `created_at`) VALUES
-(1, 'admin@shiyaswebsite.com', '$2y$10$eA3qk4x5v0osTTo9JQz2V.5t2s5sVZb6c8z2b3V4qUO8s2o7m4mIy', 'Site Admin', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, 1, 1, '2025-08-20 15:15:25'),
-(2, 'shermanshiya@gmail.com', '$2y$10$Be4xsnD8R5.DPTtFlNDBi.u81ITZ5PrQLviJfy5p4Sr0dgIN2Ntru', 'shiya s', 1, 0, 0, 0, 100, 0, 0, 0, 0, 0, NULL, '7181234567', NULL, 1, 1, '2025-08-20 18:28:43'),
-(3, 'shermanshiya+1@gmail.com', '$2y$10$kMLK94fg659GpS70vTVljeDQB7FMVlJBlRV0UHxbI6otHZX6HrIZy', 'Shiya Sherman', 2, 0, 1, 3, 700, 5, 1, 16, 4, 0, NULL, '8454133056', '8452441202', 1, 1, '2025-10-06 00:58:44'),
-(4, 'shermanshiya+2@gmail.com', '$2y$10$tOtEXJv/z5JqSlP.VYJBneDQU1roki2Pe02k373H.3sI6K6dEW1ES', 'dev tester', 2, 2, 3, 1, 700, 5, 1, 5, 1, 0, NULL, '8454133056', NULL, 1, 1, '2025-10-06 04:31:37'),
-(5, 'rafaelblum1@gmail.com', '$2y$10$SxS7K1p4t4DO4L0/YjBASOOEJFTVP6HVv3Q5V175L89baNUNTj4lq', 'Rafael Blum', 1, 1, 1, 1, 400, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, '2025-10-10 06:09:56'),
-(6, 'shia4454@gmail.com', '$2y$10$MxCWTzRiqQe8n65SI.9k6e1q9Pb7Z23y0qyG2YPxPXgfWLwjF9j7.', 'Shia', 0, 1, 1, 1, 500, 5, 1, 5, 1, 0, NULL, NULL, NULL, 1, 1, '2025-10-10 06:19:47'),
-(7, 'shermanshiya+3@gmail.com', '$2y$10$nbopzZ1N.E//OZj4lXR/W.SWzG89dyYKPKyQ7fz30DZvNWRt68OlS', 'dev tester 2', 1, 1, 0, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, '2025-10-10 09:37:50'),
-(8, '1inboxinvite@gmail.com', '$2y$10$QvTSmdFoV9Q52HzletbXCe0FoZ1kh34g7Dhx/Nw1YdTwVoyO1qUZq', 'DYM', 3, 0, 0, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, '2025-10-10 19:47:14'),
-(9, 'mottyatias15@gmail.com', '$2y$10$t55ACpnX2mRcuGZJiH49SeGWpOrH7dIlM4Z2lnmQ3fQdC1yV/W/1e', 'Shia atias', 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, '2025-10-12 01:18:26');
+INSERT INTO `users` (`id`, `email`, `password_hash`, `display_name`, `rides_offered_count`, `rides_requested_count`, `rides_given_count`, `rides_received_count`, `score`, `driver_rating_sum`, `driver_rating_count`, `passenger_rating_sum`, `passenger_rating_count`, `is_admin`, `username`, `phone`, `whatsapp`, `contact_privacy`, `message_privacy`, `reset_token_hash`, `reset_token_expires_at`, `reset_token_attempts`, `created_at`) VALUES
+(1, 'admin@shiyaswebsite.com', '$2y$10$eA3qk4x5v0osTTo9JQz2V.5t2s5sVZb6c8z2b3V4qUO8s2o7m4mIy', 'Site Admin', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, 1, 1, NULL, NULL, 0, '2025-08-20 15:15:25'),
+(2, 'shermanshiya@gmail.com', '$2y$10$Be4xsnD8R5.DPTtFlNDBi.u81ITZ5PrQLviJfy5p4Sr0dgIN2Ntru', 'shiya s', 1, 0, 0, 0, 100, 0, 0, 0, 0, 0, NULL, '7181234567', NULL, 1, 1, NULL, NULL, 0, '2025-08-20 18:28:43'),
+(3, 'shermanshiya+1@gmail.com', '$2y$10$kMLK94fg659GpS70vTVljeDQB7FMVlJBlRV0UHxbI6otHZX6HrIZy', 'Shiya Sherman', 2, 0, 1, 3, 700, 5, 1, 16, 4, 0, NULL, '8454133056', '8452441202', 1, 1, NULL, NULL, 0, '2025-10-06 00:58:44'),
+(4, 'shermanshiya+2@gmail.com', '$2y$10$tOtEXJv/z5JqSlP.VYJBneDQU1roki2Pe02k373H.3sI6K6dEW1ES', 'dev tester', 2, 2, 3, 1, 700, 5, 1, 5, 1, 0, NULL, '8454133056', NULL, 1, 1, NULL, NULL, 0, '2025-10-06 04:31:37'),
+(5, 'rafaelblum1@gmail.com', '$2y$10$SxS7K1p4t4DO4L0/YjBASOOEJFTVP6HVv3Q5V175L89baNUNTj4lq', 'Rafael Blum', 1, 1, 1, 1, 400, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, NULL, NULL, 0, '2025-10-10 06:09:56'),
+(6, 'shia4454@gmail.com', '$2y$10$MxCWTzRiqQe8n65SI.9k6e1q9Pb7Z23y0qyG2YPxPXgfWLwjF9j7.', 'Shia', 0, 1, 1, 1, 500, 5, 1, 5, 1, 0, NULL, NULL, NULL, 1, 1, NULL, NULL, 0, '2025-10-10 06:19:47'),
+(7, 'shermanshiya+3@gmail.com', '$2y$10$nbopzZ1N.E//OZj4lXR/W.SWzG89dyYKPKyQ7fz30DZvNWRt68OlS', 'dev tester 2', 1, 1, 0, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, NULL, NULL, 0, '2025-10-10 09:37:50'),
+(8, '1inboxinvite@gmail.com', '$2y$10$QvTSmdFoV9Q52HzletbXCe0FoZ1kh34g7Dhx/Nw1YdTwVoyO1qUZq', 'DYM', 3, 0, 0, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, NULL, NULL, 0, '2025-10-10 19:47:14'),
+(9, 'mottyatias15@gmail.com', '$2y$10$t55ACpnX2mRcuGZJiH49SeGWpOrH7dIlM4Z2lnmQ3fQdC1yV/W/1e', 'Shia atias', 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, NULL, NULL, 0, '2025-10-12 01:18:26');
 
 -- --------------------------------------------------------
 
