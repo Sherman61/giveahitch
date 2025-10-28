@@ -53,12 +53,24 @@ $bootstrap = [
       border-color: rgba(13, 110, 253, 0.35);
       background: rgba(13, 110, 253, 0.08);
     }
+    .notification-item.has-link {
+      cursor: pointer;
+    }
     .notification-item:hover {
       box-shadow: 0 12px 24px rgba(15, 64, 128, 0.12);
     }
     .notification-meta {
       font-size: 0.85rem;
       color: #6c757d;
+    }
+    .notification-link {
+      color: inherit;
+      text-decoration: none;
+      display: block;
+    }
+    .notification-link:hover .notification-title,
+    .notification-link:focus-visible .notification-title {
+      text-decoration: underline;
     }
     .settings-card {
       border-radius: 1rem;

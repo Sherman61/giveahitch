@@ -6,6 +6,10 @@ namespace App\Notifications;
 use PDO;
 use PDOException;
 use RuntimeException;
+use Throwable;
+
+use Minishlink\WebPush\Subscription;
+use Minishlink\WebPush\WebPush;
 
 require_once __DIR__ . '/../lib/ws.php';
 
@@ -237,6 +241,234 @@ function broadcast_notification(array $notification, int $unreadCount): void
 }
 
 /**
+ * Attempt to load VAPID credentials for push notifications.
+ *
+ * @return array{public:string,private:string,subject:string}|null
+ */
+function push_vapid_credentials(): ?array
+{
+    static $cache;
+    if ($cache === false) {
+        return null;
+    }
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $configPath = __DIR__ . '/../config/config.php';
+    if (!is_file($configPath)) {
+        $cache = false;
+        return null;
+    }
+
+    $config = require $configPath;
+    $vapid = $config['vapid'] ?? null;
+
+    if (!is_array($vapid)
+        || empty($vapid['public'])
+        || empty($vapid['private'])
+        || empty($vapid['subject'])
+    ) {
+        $cache = false;
+        return null;
+    }
+
+    $cache = [
+        'public' => (string)$vapid['public'],
+        'private' => (string)$vapid['private'],
+        'subject' => (string)$vapid['subject'],
+    ];
+
+    return $cache;
+}
+
+/** Ensure the WebPush dependencies are available before attempting delivery. */
+function ensure_push_dependencies_loaded(): bool
+{
+    static $loaded;
+    if ($loaded === true) {
+        return true;
+    }
+    if ($loaded === false) {
+        return false;
+    }
+
+    if (!class_exists(WebPush::class) || !class_exists(Subscription::class)) {
+        $autoload = __DIR__ . '/../vendor/autoload.php';
+        if (is_file($autoload)) {
+            require_once $autoload;
+        }
+    }
+
+    $loaded = class_exists(WebPush::class) && class_exists(Subscription::class);
+    return $loaded;
+}
+
+/**
+ * Determine the most appropriate target URL for a notification.
+ */
+function notification_target_url(array $notification): string
+{
+    $metadata = $notification['metadata'] ?? null;
+    if (is_array($metadata)) {
+        foreach (['url', 'target_url', 'href'] as $key) {
+            if (!empty($metadata[$key]) && is_string($metadata[$key])) {
+                return (string)$metadata[$key];
+            }
+        }
+    }
+
+    if (!empty($notification['ride_id'])) {
+        return '/manage_ride.php?id=' . (int)$notification['ride_id'];
+    }
+
+    return '/notifications.php';
+}
+
+/**
+ * Broadcast a web push notification mirroring the in-app notification.
+ */
+function send_push_notification(PDO $pdo, array $notification): void
+{
+    $userId = (int)($notification['user_id'] ?? 0);
+    if ($userId <= 0) {
+        return;
+    }
+
+    $vapid = push_vapid_credentials();
+    if (!$vapid || !ensure_push_dependencies_loaded()) {
+        return;
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = :uid');
+        $stmt->execute([':uid' => $userId]);
+        $subscriptions = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (PDOException $e) {
+        error_log('notifications:push_fetch_failed ' . $e->getMessage());
+        return;
+    }
+
+    if (!$subscriptions) {
+        return;
+    }
+
+    $url = notification_target_url($notification);
+    $body = isset($notification['body']) && $notification['body'] !== null
+        ? (string)$notification['body']
+        : '';
+
+    $payloadData = [
+        'title' => (string)($notification['title'] ?? 'GlitchaHitch'),
+        'body' => $body,
+        'icon' => '/assets/img/icon-192.png',
+        'badge' => '/assets/img/badge-72.png',
+        'url' => $url,
+        'tag' => 'notification-' . (int)($notification['id'] ?? 0),
+        'data' => [
+            'url' => $url,
+            'notification_id' => (int)($notification['id'] ?? 0),
+            'type' => $notification['type'] ?? null,
+            'ride_id' => $notification['ride_id'] ?? null,
+            'match_id' => $notification['match_id'] ?? null,
+        ],
+    ];
+
+    if (!empty($notification['metadata']) && is_array($notification['metadata'])) {
+        $payloadData['data']['metadata'] = $notification['metadata'];
+    }
+
+    $payload = json_encode($payloadData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($payload === false) {
+        return;
+    }
+
+    try {
+        $webPush = new WebPush([
+            'VAPID' => [
+                'subject' => $vapid['subject'],
+                'publicKey' => $vapid['public'],
+                'privateKey' => $vapid['private'],
+            ],
+        ]);
+        $webPush->setReuseVAPIDHeaders(true);
+    } catch (Throwable $e) {
+        error_log('notifications:push_init_failed ' . $e->getMessage());
+        return;
+    }
+
+    foreach ($subscriptions as $row) {
+        $endpoint = (string)($row['endpoint'] ?? '');
+        $p256dh = (string)($row['p256dh'] ?? '');
+        $auth = (string)($row['auth'] ?? '');
+
+        if ($endpoint === '' || $p256dh === '' || $auth === '') {
+            continue;
+        }
+
+        try {
+            $subscription = Subscription::create([
+                'endpoint' => $endpoint,
+                'publicKey' => $p256dh,
+                'authToken' => $auth,
+                'contentEncoding' => 'aes128gcm',
+            ]);
+        } catch (Throwable $e) {
+            error_log('notifications:push_subscription_invalid ' . $e->getMessage());
+            continue;
+        }
+
+        try {
+            $webPush->queueNotification($subscription, $payload);
+        } catch (Throwable $e) {
+            error_log('notifications:push_queue_failed ' . $e->getMessage());
+        }
+    }
+
+    $invalidEndpoints = [];
+
+    try {
+        foreach ($webPush->flush() as $report) {
+            if ($report->isSuccess()) {
+                continue;
+            }
+
+            $endpoint = $report->getEndpoint();
+            $status = null;
+            $response = $report->getResponse();
+            if ($response) {
+                $status = $response->getStatusCode();
+            }
+
+            if (in_array($status, [404, 410], true) && $endpoint) {
+                $invalidEndpoints[$endpoint] = true;
+            }
+
+            error_log(sprintf(
+                'notifications:push_failed endpoint=%s status=%s reason=%s',
+                $endpoint ?: 'unknown',
+                $status !== null ? (string)$status : 'n/a',
+                $report->getReason()
+            ));
+        }
+    } catch (Throwable $e) {
+        error_log('notifications:push_flush_failed ' . $e->getMessage());
+    }
+
+    if ($invalidEndpoints) {
+        try {
+            $placeholders = implode(',', array_fill(0, count($invalidEndpoints), '?'));
+            $stmt = $pdo->prepare("DELETE FROM push_subscriptions WHERE endpoint IN ($placeholders)");
+            if ($stmt) {
+                $stmt->execute(array_keys($invalidEndpoints));
+            }
+        } catch (PDOException $e) {
+            error_log('notifications:push_cleanup_failed ' . $e->getMessage());
+        }
+    }
+}
+
+/**
  * Create a notification for a user. Returns the formatted notification or null if skipped.
  *
  * @param array<string,mixed> $data
@@ -284,6 +516,7 @@ function create(PDO $pdo, array $data): ?array
 
     $unread = unread_count($pdo, $userId);
     broadcast_notification($notification, $unread);
+    send_push_notification($pdo, $notification);
 
     return $notification;
 }
@@ -313,6 +546,9 @@ function notify_ride_owner(PDO $pdo, array $rideRow, array $actor, string $type,
     }
 
     $payload['ride_type'] = $payload['ride_type'] ?? ($rideRow['type'] ?? null);
+    if (!isset($payload['url']) && $rideId) {
+        $payload['url'] = '/manage_ride.php?id=' . $rideId;
+    }
 
     return create($pdo, [
         'user_id' => $userId,
