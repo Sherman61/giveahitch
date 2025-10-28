@@ -49,6 +49,21 @@ COMMIT;
 
 START TRANSACTION;
 
+ALTER TABLE users
+  ADD COLUMN reset_token_hash VARCHAR(255) NULL AFTER message_privacy,
+  ADD COLUMN reset_token_expires_at DATETIME NULL AFTER reset_token_hash,
+  ADD COLUMN reset_token_attempts INT NOT NULL DEFAULT 0 AFTER reset_token_expires_at;
+
+UPDATE users
+  SET reset_token_hash = NULL,
+      reset_token_expires_at = NULL,
+      reset_token_attempts = 0
+  WHERE reset_token_attempts IS NULL;
+
+COMMIT;
+
+START TRANSACTION;
+
 -- Add per-user contact privacy setting (1=match only, 2=logged-in, 3=public with active ride).
 ALTER TABLE users
   ADD COLUMN contact_privacy TINYINT NOT NULL DEFAULT 1 AFTER whatsapp;

@@ -201,6 +201,9 @@ CREATE TABLE `users` (
   `whatsapp` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `contact_privacy` tinyint NOT NULL DEFAULT '1',
   `message_privacy` tinyint NOT NULL DEFAULT '1',
+  `reset_token_hash` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `reset_token_expires_at` datetime DEFAULT NULL,
+  `reset_token_attempts` int NOT NULL DEFAULT '0',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -208,11 +211,11 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `email`, `password_hash`, `display_name`, `rides_offered_count`, `rides_requested_count`, `rides_given_count`, `rides_received_count`, `score`, `driver_rating_sum`, `driver_rating_count`, `passenger_rating_sum`, `passenger_rating_count`, `is_admin`, `username`, `phone`, `whatsapp`, `contact_privacy`, `message_privacy`, `created_at`) VALUES
-(1, 'admin@shiyaswebsite.com', '$2y$10$eA3qk4x5v0osTTo9JQz2V.5t2s5sVZb6c8z2b3V4qUO8s2o7m4mIy', 'Site Admin', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, 1, 1, '2025-08-20 15:15:25'),
-(2, 'shermanshiya@gmail.com', '$2y$10$Be4xsnD8R5.DPTtFlNDBi.u81ITZ5PrQLviJfy5p4Sr0dgIN2Ntru', 'shiya s', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, 1, 1, '2025-08-20 18:28:43'),
-(3, 'shermanshiya+1@gmail.com', '$2y$10$kMLK94fg659GpS70vTVljeDQB7FMVlJBlRV0UHxbI6otHZX6HrIZy', 'Shiya Sherman', 1, 0, 0, 2, 200, 0, 0, 5, 1, 0, NULL, '8454133056', '8452441202', 1, 1, '2025-10-06 00:58:44'),
-(4, 'shermanshiya+2@gmail.com', '$2y$10$tOtEXJv/z5JqSlP.VYJBneDQU1roki2Pe02k373H.3sI6K6dEW1ES', 'dev tester', 0, 0, 2, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, '2025-10-06 04:31:37');
+INSERT INTO `users` (`id`, `email`, `password_hash`, `display_name`, `rides_offered_count`, `rides_requested_count`, `rides_given_count`, `rides_received_count`, `score`, `driver_rating_sum`, `driver_rating_count`, `passenger_rating_sum`, `passenger_rating_count`, `is_admin`, `username`, `phone`, `whatsapp`, `contact_privacy`, `message_privacy`, `reset_token_hash`, `reset_token_expires_at`, `reset_token_attempts`, `created_at`) VALUES
+(1, 'admin@shiyaswebsite.com', '$2y$10$eA3qk4x5v0osTTo9JQz2V.5t2s5sVZb6c8z2b3V4qUO8s2o7m4mIy', 'Site Admin', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, 1, 1, NULL, NULL, 0, '2025-08-20 15:15:25'),
+(2, 'shermanshiya@gmail.com', '$2y$10$Be4xsnD8R5.DPTtFlNDBi.u81ITZ5PrQLviJfy5p4Sr0dgIN2Ntru', 'shiya s', 0, 0, 0, 0, 100, 0, 0, 0, 0, 1, NULL, NULL, NULL, 1, 1, NULL, NULL, 0, '2025-08-20 18:28:43'),
+(3, 'shermanshiya+1@gmail.com', '$2y$10$kMLK94fg659GpS70vTVljeDQB7FMVlJBlRV0UHxbI6otHZX6HrIZy', 'Shiya Sherman', 1, 0, 0, 2, 200, 0, 0, 5, 1, 0, NULL, '8454133056', '8452441202', 1, 1, NULL, NULL, 0, '2025-10-06 00:58:44'),
+(4, 'shermanshiya+2@gmail.com', '$2y$10$tOtEXJv/z5JqSlP.VYJBneDQU1roki2Pe02k373H.3sI6K6dEW1ES', 'dev tester', 0, 0, 2, 0, 100, 0, 0, 0, 0, 0, NULL, NULL, NULL, 1, 1, NULL, NULL, 0, '2025-10-06 04:31:37');
 
 -- --------------------------------------------------------
 
