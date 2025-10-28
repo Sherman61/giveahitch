@@ -355,6 +355,25 @@ const escapeHtml = (value) => {
   }[match] || match));
 };
 
+const resolveNotificationUrl = (item) => {
+  if (!item || typeof item !== 'object') return null;
+  const meta = item.metadata;
+  if (meta && typeof meta === 'object') {
+    for (const key of ['url', 'target_url', 'href']) {
+      const raw = meta[key];
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (trimmed) return trimmed;
+      }
+    }
+  }
+  const rideId = Number(item.ride_id || 0);
+  if (rideId > 0) {
+    return `/manage_ride.php?id=${rideId}`;
+  }
+  return null;
+};
+
 const renderNotification = (item) => {
   const unreadClass = item.is_read ? '' : ' unread';
   const actor = item.actor_display_name ? `<span class="fw-semibold">${escapeHtml(item.actor_display_name)}</span>` : '';
@@ -365,13 +384,19 @@ const renderNotification = (item) => {
   const meta = metaParts.length ? `<div class="notification-meta">${metaParts.join(' • ')}</div>` : '';
   const body = item.body ? `<p class="mb-0 text-secondary">${escapeHtml(item.body)}</p>` : '';
   const markBtn = item.is_read ? '' : `<button class="btn btn-link btn-sm px-0" data-action="mark-read" data-id="${item.id}" type="button">Mark as read</button>`;
+  const url = resolveNotificationUrl(item);
+  const hasLinkClass = url ? ' has-link' : '';
+  const linkStart = url ? `<a class="notification-link" data-notification-link data-id="${item.id}" href="${escapeHtml(url)}">` : '';
+  const linkEnd = url ? '</a>' : '';
   return `
-    <div class="notification-item${unreadClass}" data-id="${item.id}">
+    <div class="notification-item${unreadClass}${hasLinkClass}" data-id="${item.id}">
       <div class="d-flex justify-content-between align-items-start gap-3">
-        <div>
-          <h2 class="h6 mb-1">${escapeHtml(item.title)}</h2>
-          ${body}
-          ${meta}
+        <div class="flex-grow-1">
+          ${linkStart}
+            <h2 class="h6 mb-1 notification-title">${escapeHtml(item.title)}</h2>
+            ${body}
+            ${meta}
+          ${linkEnd}
         </div>
         ${markBtn ? `<div>${markBtn}</div>` : ''}
       </div>
@@ -541,9 +566,20 @@ if (listEl) {
   listEl.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    const action = target.getAttribute('data-action');
+    const link = target.closest('[data-notification-link]');
+    if (link instanceof HTMLAnchorElement) {
+      const id = link.getAttribute('data-id');
+      if (id) {
+        markNotifications({ ids: [id] });
+      }
+      return;
+    }
+    const actionTarget = target.closest('[data-action]');
+    const action = actionTarget?.getAttribute('data-action');
     if (action === 'mark-read') {
-      const id = target.getAttribute('data-id');
+      event.preventDefault();
+      event.stopPropagation();
+      const id = actionTarget.getAttribute('data-id');
       if (id) {
         markNotifications({ ids: [id] });
       }
