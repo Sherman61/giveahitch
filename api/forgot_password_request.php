@@ -12,7 +12,7 @@ require_once __DIR__ . '/../config/db.php'; // must define $pdo (PDO)
 
 use Symfony\Component\HttpClient\HttpClient;
 
-function json_out($arr, int $code = 200): never
+function json_out($arr, int $code = 200): void
 {
     http_response_code($code);
     echo json_encode($arr, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
@@ -50,7 +50,7 @@ try {
     if ($token === '')
         json_out(['ok' => false, 'error' => 'Server email token not configured'], 500);
 
-    $from = $_ENV['TEST_EMAIL_FROM'] ?? 'no-reply@glitchahitch.com'; // your from
+    $from = 'no-reply@glitchahitch.com';
     $client = HttpClient::create();
 
     $text = "Your GlitchaHitch password reset code is: $code\n\nThis code expires in 15 minutes.";
@@ -61,6 +61,7 @@ try {
         'headers' => [
             'Authorization' => 'Bearer ' . $token,
             'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
         ],
         'json' => [
             'from' => ['email' => $from, 'name' => 'GlitchaHitch'],
@@ -72,9 +73,19 @@ try {
         'timeout' => 15,
     ]);
 
-    $ok = $resp->getStatusCode() >= 200 && $resp->getStatusCode() < 300;
-    json_out(['ok' => $ok, 'sent' => $ok]);
+    $status = $resp->getStatusCode();
+    $ok = $status >= 200 && $status < 300;
+    if (!$ok) {
+        error_log(sprintf(
+            'forgot_password_request: Mailtrap responded with HTTP %d: %s',
+            $status,
+            $resp->getContent(false)
+        ));
+    }
+
+    json_out(['ok' => $ok, 'sent' => $ok], $ok ? 200 : 502);
 
 } catch (Throwable $e) {
+    error_log('forgot_password_request: ' . $e->getMessage());
     json_out(['ok' => false, 'error' => 'Server error'], 500);
 }

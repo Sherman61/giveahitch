@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Mailer;
 
+use function class_exists;
 use function curl_close;
 use function curl_errno;
 use function curl_error;
@@ -16,8 +17,8 @@ use function getenv;
 use function htmlspecialchars;
 use function is_string;
 use function json_encode;
-use function trim;
 use function sprintf;
+use function trim;
 use const CURLINFO_HTTP_CODE;
 use const CURLOPT_HTTPHEADER;
 use const CURLOPT_POST;
@@ -29,6 +30,13 @@ use const JSON_UNESCAPED_SLASHES;
 use const JSON_UNESCAPED_UNICODE;
 
 const MAILTRAP_ENDPOINT = 'https://send.api.mailtrap.io/api/send';
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+if (!defined('APP_ENV_LOADED') && class_exists(\Dotenv\Dotenv::class)) {
+    \Dotenv\Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
+    define('APP_ENV_LOADED', true);
+}
 
 /**
  * Fetch the configured Mailtrap token from environment variables.
@@ -87,7 +95,7 @@ function send_mailtrap(array $message): bool
         return false;
     }
 
-    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
     if ($status < 200 || $status >= 300) {
@@ -120,22 +128,22 @@ function send_password_reset_code(string $email, string $name, string $code): bo
     $displayName = format_display_name($name, $email);
     $safeName = htmlspecialchars($displayName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-    $subject = 'Your Glitch a Hitch password reset code';
+    $subject = 'Your GlitchaHitch password reset code';
     $textBody = sprintf(
-        "Hi %s,\n\nUse the verification code %s to reset your Glitch a Hitch password. This code expires in 15 minutes.\n\nIf you did not request a reset you can ignore this email.\n",
+        "Hi %s,\n\nUse the verification code %s to reset your GlitchaHitch password. This code expires in 15 minutes.\n\nIf you did not request a reset you can ignore this email.\n",
         $displayName,
         $code
     );
     $htmlBody = sprintf(
-        '<p>Hi %s,</p><p>Use the verification code <strong>%s</strong> to reset your Glitch a Hitch password. This code expires in 15 minutes.</p><p>If you did not request a reset you can ignore this email.</p>',
+        '<p>Hi %s,</p><p>Use the verification code <strong>%s</strong> to reset your GlitchaHitch password. This code expires in 15 minutes.</p><p>If you did not request a reset you can ignore this email.</p>',
         $safeName,
         htmlspecialchars($code, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
     );
 
     $payload = [
         'from' => [
-            'email' => 'support@giveahitch.com',
-            'name'  => 'Glitch a Hitch',
+            'email' => 'no-reply@glitchahitch.com',
+            'name'  => 'GlitchaHitch',
         ],
         'to' => [
             [

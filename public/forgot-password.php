@@ -2,14 +2,12 @@
 // /public/forgot-password.php
 declare(strict_types=1);
 
-// Safe session + CSRF without external deps
-ini_set('session.use_strict_mode', '1');
-session_set_cookie_params(['httponly' => true, 'secure' => isset($_SERVER['HTTPS']), 'samesite' => 'Lax']);
-if (session_status() !== PHP_SESSION_ACTIVE)
-  session_start();
+require_once __DIR__ . '/../lib/session.php';
+require_once __DIR__ . '/../lib/auth.php';
 
-// CSRF token (rotate each view)
-$csrf = bin2hex(random_bytes(32));
+start_secure_session();
+$csrf = \App\Auth\csrf_token();
+// Maintain legacy key to support any scripts that may still look it up.
 $_SESSION['csrf_token'] = $csrf;
 
 $emailPrefill = isset($_GET['email']) ? (string) $_GET['email'] : '';
