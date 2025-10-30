@@ -12,7 +12,7 @@ require_once __DIR__ . '/../config/db.php'; // must define $pdo (PDO)
 
 use Symfony\Component\HttpClient\HttpClient;
 
-function json_out($arr, int $code = 200): never
+function json_out($arr, int $code = 200): void
 {
     http_response_code($code);
     echo json_encode($arr, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
