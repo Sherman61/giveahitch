@@ -33,12 +33,6 @@ try {
             $ip = $packed;
         }
     }
-    if ($ip === null) {
-        $fallback = @inet_pton('0.0.0.0');
-        if ($fallback !== false) {
-            $ip = $fallback;
-        }
-    }
     $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
 
     // find user
@@ -55,17 +49,7 @@ try {
 
     // Insert record
     $ins = $pdo->prepare('INSERT INTO password_resets (user_id, email, code, ip, ua, expires_at) VALUES (?, ?, ?, ?, ?, ?)');
-    $ins->bindValue(1, (int) $user['id'], PDO::PARAM_INT);
-    $ins->bindValue(2, $user['email']);
-    $ins->bindValue(3, $code);
-    if ($ip === null) {
-        $ins->bindValue(4, null, PDO::PARAM_NULL);
-    } else {
-        $ins->bindValue(4, $ip, PDO::PARAM_LOB);
-    }
-    $ins->bindValue(5, $ua);
-    $ins->bindValue(6, $expiresAt);
-    $ins->execute();
+    $ins->execute([$user['id'], $user['email'], $code, $ip, $ua, $expiresAt]);
 
     $sent = send_password_reset_code($user['email'], $user['display_name'] ?? '', $code);
     if (!$sent) {
