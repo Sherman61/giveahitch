@@ -9,17 +9,82 @@ if (class_exists(Dotenv\Dotenv::class)) {
 require_once __DIR__ . '/../config/db.php'; // must define $pdo (PDO)
 require_once __DIR__ . '/../lib/mailer.php';
 
+// Built-in classes referenced explicitly below.
+
 use function App\Mailer\send_password_reset_code;
 
-function json_out($arr, int $code = 200): void
+/**
+ * Output JSON and terminate the script.
+ *
+ * @param array<string,mixed> $arr
+ */
+function json_out(array $arr, int $code = 200): void
 {
     http_response_code($code);
     echo json_encode($arr, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
     exit;
 }
 
+/**
+ * Ensure the password_resets table exists and return its column list.
+ *
+ * @return string[]
+ */
+function password_reset_columns(PDO $pdo): array
+{
+    try {
+        $columnStmt = $pdo->query('SHOW COLUMNS FROM password_resets');
+        if ($columnStmt !== false) {
+            return $columnStmt->fetchAll(PDO::FETCH_COLUMN);
+        }
+    } catch (PDOException $schemaErr) {
+        // Table missing – create it using the expected schema and retry.
+        if ($schemaErr->getCode() === '42S02') { // base table or view not found
+            $createSql = <<<SQL
+CREATE TABLE IF NOT EXISTS password_resets (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    code CHAR(6) NOT NULL,
+    attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    ip VARBINARY(16) DEFAULT NULL,
+    ua VARCHAR(255) DEFAULT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_email_expires (email, expires_at),
+    KEY idx_user_expires (user_id, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL;
+            $pdo->exec($createSql);
+            $columnStmt = $pdo->query('SHOW COLUMNS FROM password_resets');
+            if ($columnStmt !== false) {
+                return $columnStmt->fetchAll(PDO::FETCH_COLUMN);
+            }
+        }
+
+        error_log('forgot_password_request: failed to introspect password_resets: ' . $schemaErr->getMessage());
+    } catch (Throwable $schemaErr) {
+        error_log('forgot_password_request: unexpected schema error: ' . $schemaErr->getMessage());
+    }
+
+    return [];
+}
+
 try {
-    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        json_out([
+            'ok' => false,
+            'error' => 'Method not allowed',
+        ], 405);
+    }
+
+    $rawBody = file_get_contents('php://input');
+    $body = json_decode($rawBody ?: '[]', true);
+    if (!is_array($body)) {
+        json_out(['ok' => false, 'error' => 'Invalid request body'], 400);
+    }
     $email = trim((string) ($body['email'] ?? ''));
     if ($email === '')
         json_out(['ok' => false, 'error' => 'Email is required'], 422);
