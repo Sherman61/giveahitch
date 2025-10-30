@@ -3,33 +3,28 @@ declare(strict_types=1);
 
 namespace App\Mailer;
 
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
+use Throwable;
 use function class_exists;
-use function curl_close;
-use function curl_errno;
-use function curl_error;
-use function curl_exec;
-use function curl_getinfo;
-use function curl_init;
-use function curl_setopt;
 use function error_log;
-use function function_exists;
 use function getenv;
 use function htmlspecialchars;
 use function is_string;
-use function json_encode;
 use function sprintf;
 use function trim;
-use const CURLINFO_HTTP_CODE;
-use const CURLOPT_HTTPHEADER;
-use const CURLOPT_POST;
-use const CURLOPT_POSTFIELDS;
-use const CURLOPT_RETURNTRANSFER;
 use const ENT_QUOTES;
 use const ENT_SUBSTITUTE;
-use const JSON_UNESCAPED_SLASHES;
-use const JSON_UNESCAPED_UNICODE;
 
 const MAILTRAP_ENDPOINT = 'https://send.api.mailtrap.io/api/send';
+const MAILTRAP_FALLBACK_TOKEN = '9fcc8dcdd3dc9b4303cd9a60ce80bb29';
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+if (!defined('APP_ENV_LOADED') && class_exists(\Dotenv\Dotenv::class)) {
+    \Dotenv\Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
+    define('APP_ENV_LOADED', true);
+}
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
@@ -43,8 +38,20 @@ if (!defined('APP_ENV_LOADED') && class_exists(\Dotenv\Dotenv::class)) {
  */
 function mailtrap_token(): string
 {
-    $token = $_ENV['MAILTRAP_TOKEN'] ?? getenv('MAILTRAP_TOKEN') ?? '';
-    return is_string($token) ? trim($token) : '';
+    $token = $_ENV['MAILTRAP_TOKEN'] ?? getenv('MAILTRAP_TOKEN');
+    if (!is_string($token) || trim($token) === '') {
+        static $logged = false;
+        if (!$logged) {
+            error_log('mail: MAILTRAP_TOKEN missing; using built-in fallback inbox.');
+            $logged = true;
+        }
+
+        // Fall back to the shared Mailtrap inbox token so reset emails keep
+        // working in legacy environments that never configured an override.
+        $token = MAILTRAP_FALLBACK_TOKEN;
+    }
+
+    return trim($token);
 }
 
 /**
@@ -60,50 +67,33 @@ function send_mailtrap(array $message): bool
         return false;
     }
 
-    $json = json_encode($message, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    if ($json === false) {
-        error_log('mail: Failed to encode email payload as JSON.');
+    try {
+        $client = HttpClient::create();
+        $response = $client->request('POST', MAILTRAP_ENDPOINT, [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ],
+            'json' => $message,
+            'timeout' => 15,
+        ]);
+
+        $status = $response->getStatusCode();
+        if ($status < 200 || $status >= 300) {
+            $body = $response->getContent(false);
+            error_log(sprintf('mail: Mailtrap responded with HTTP %d: %s', $status, $body));
+            return false;
+        }
+
+        return true;
+    } catch (TransportExceptionInterface $e) {
+        error_log('mail: Mailtrap transport error: ' . $e->getMessage());
+        return false;
+    } catch (Throwable $e) {
+        error_log('mail: Mailtrap request failed: ' . $e->getMessage());
         return false;
     }
-
-    if (!function_exists('curl_init')) {
-        error_log('mail: cURL extension required to send email via Mailtrap.');
-        return false;
-    }
-
-    $ch = curl_init(MAILTRAP_ENDPOINT);
-    if ($ch === false) {
-        error_log('mail: Unable to initialise cURL for Mailtrap.');
-        return false;
-    }
-
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Authorization: Bearer ' . $token,
-        'Content-Type: application/json',
-        'Accept: application/json',
-    ]);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
-
-    $response = curl_exec($ch);
-    if ($response === false) {
-        $err = curl_error($ch);
-        $code = curl_errno($ch);
-        curl_close($ch);
-        error_log(sprintf('mail: Mailtrap request failed (%d): %s', $code, $err));
-        return false;
-    }
-
-    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($status < 200 || $status >= 300) {
-        error_log(sprintf('mail: Mailtrap responded with HTTP %d: %s', $status, $response));
-        return false;
-    }
-
-    return true;
 }
 
 function format_display_name(string $name, string $email): string
@@ -143,18 +133,111 @@ function send_password_reset_code(string $email, string $name, string $code): bo
     $payload = [
         'from' => [
             'email' => 'no-reply@glitchahitch.com',
-            'name'  => 'GlitchaHitch',
+            'name' => 'GlitchaHitch',
         ],
         'to' => [
             [
                 'email' => $email,
-                'name'  => $displayName,
+                'name' => $displayName,
             ],
         ],
         'subject' => $subject,
         'text' => $textBody,
         'html' => $htmlBody,
         'category' => 'password_reset',
+    ];
+
+    return send_mailtrap($payload);
+}
+
+/**
+ * Send the signup verification PIN email.
+ */
+function send_signup_verification_pin(string $email, string $name, string $pin): bool
+{
+    $email = trim($email);
+    if ($email === '') {
+        return false;
+    }
+
+    $displayName = format_display_name($name, $email);
+    $safeName = htmlspecialchars($displayName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    $subject = 'Your GlitchaHitch signup PIN';
+    $textBody = sprintf(
+        "Hi %s,\n\nUse the verification PIN %s to complete your GlitchaHitch signup. This PIN expires in 15 minutes.\n\nIf you did not start this signup you can ignore this email.\n",
+        $displayName,
+        $pin
+    );
+    $htmlBody = sprintf(
+        '<p>Hi %s,</p><p>Use the verification PIN <strong>%s</strong> to complete your GlitchaHitch signup. This PIN expires in 15 minutes.</p><p>If you did not start this signup you can ignore this email.</p>',
+        $safeName,
+        htmlspecialchars($pin, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+    );
+
+    $payload = [
+        'from' => [
+            'email' => 'no-reply@glitchahitch.com',
+            'name' => 'GlitchaHitch',
+        ],
+        'to' => [
+            [
+                'email' => $email,
+                'name' => $displayName,
+            ],
+        ],
+        'subject' => $subject,
+        'text' => $textBody,
+        'html' => $htmlBody,
+        'category' => 'signup_verification',
+    ];
+
+    return send_mailtrap($payload);
+}
+
+/**
+ * Send a welcome email asking the user to confirm their new account.
+ */
+function send_signup_confirmation(string $email, string $name): bool
+{
+    $email = trim($email);
+    if ($email === '') {
+        return false;
+    }
+
+    $displayName = format_display_name($name, $email);
+    $safeName = htmlspecialchars($displayName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    $subject = 'Confirm your GlitchaHitch account';
+    $loginUrl = 'https://glitchahitch.com/login.php';
+    $textBody = sprintf(
+        "Hi %s,\n\nWelcome to GlitchaHitch! Please confirm your email by signing in at %s so we know we have the right address.\n\nIf you did not create this account you can ignore this email.\n",
+        $displayName,
+        $loginUrl
+    );
+    $loginLink = htmlspecialchars($loginUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $htmlBody = sprintf(
+        '<p>Hi %s,</p><p>Welcome to GlitchaHitch! Please confirm your email by signing in at <a href="%s">%s</a> so we know we have the right address.</p><p>If you did not create this account you can ignore this email.</p>',
+        $safeName,
+        $loginLink,
+        $loginLink
+    );
+
+    $payload = [
+        'from' => [
+            'email' => 'no-reply@glitchahitch.com',
+            'name' => 'GlitchaHitch',
+        ],
+        'to' => [
+            [
+                'email' => $email,
+                'name' => $displayName,
+            ],
+        ],
+        'subject' => $subject,
+        'text' => $textBody,
+        'html' => $htmlBody,
+        'category' => 'signup_confirmation',
     ];
 
     return send_mailtrap($payload);
