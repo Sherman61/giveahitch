@@ -49,8 +49,8 @@ try {
     $uid = (int) $data['uid'];
     $hash = password_hash($password, PASSWORD_DEFAULT);
 
-    // Update user password (adjust column name if your schema differs)
-    $pdo->prepare('UPDATE users SET password = ? WHERE id = ?')->execute([$hash, $uid]);
+    // Update user password
+    $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([$hash, $uid]);
 
     out(['ok' => true]);
 } catch (Throwable $e) {
