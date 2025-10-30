@@ -3,14 +3,13 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 require __DIR__ . '/../vendor/autoload.php';
-$configLoaded = false;
 if (class_exists(Dotenv\Dotenv::class)) {
     Dotenv\Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
-    $configLoaded = true;
 }
 require_once __DIR__ . '/../config/db.php'; // must define $pdo (PDO)
+require_once __DIR__ . '/../lib/mailer.php';
 
-use Symfony\Component\HttpClient\HttpClient;
+use function App\Mailer\send_password_reset_code;
 
 function json_out($arr, int $code = 200): void
 {
@@ -26,11 +25,24 @@ try {
         json_out(['ok' => false, 'error' => 'Email is required'], 422);
 
     // Basic rate-limit (per email/IP)
-    $ip = inet_pton($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1');
+    $ip = null;
+    $remoteAddr = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    if ($remoteAddr !== '' && filter_var($remoteAddr, FILTER_VALIDATE_IP)) {
+        $packed = @inet_pton($remoteAddr);
+        if ($packed !== false) {
+            $ip = $packed;
+        }
+    }
+    if ($ip === null) {
+        $fallback = @inet_pton('0.0.0.0');
+        if ($fallback !== false) {
+            $ip = $fallback;
+        }
+    }
     $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
 
     // find user
-    $stmt = $pdo->prepare('SELECT id, email FROM users WHERE email = ? LIMIT 1');
+    $stmt = $pdo->prepare('SELECT id, email, display_name FROM users WHERE email = ? LIMIT 1');
     $stmt->execute([$email]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     // Always respond 200 to avoid email enumeration
@@ -43,47 +55,29 @@ try {
 
     // Insert record
     $ins = $pdo->prepare('INSERT INTO password_resets (user_id, email, code, ip, ua, expires_at) VALUES (?, ?, ?, ?, ?, ?)');
-    $ins->execute([$user['id'], $user['email'], $code, $ip, $ua, $expiresAt]);
+    $ins->bindValue(1, (int) $user['id'], PDO::PARAM_INT);
+    $ins->bindValue(2, $user['email']);
+    $ins->bindValue(3, $code);
+    if ($ip === null) {
+        $ins->bindValue(4, null, PDO::PARAM_NULL);
+    } else {
+        $ins->bindValue(4, $ip, PDO::PARAM_LOB);
+    }
+    $ins->bindValue(5, $ua);
+    $ins->bindValue(6, $expiresAt);
+    $ins->execute();
 
-    // Send email via Mailtrap HTTP API
-    $token = trim((string) ($_ENV['MAILTRAP_TOKEN'] ?? ''));
-    if ($token === '')
-        json_out(['ok' => false, 'error' => 'Server email token not configured'], 500);
-
-    $from = 'no-reply@glitchahitch.com';
-    $client = HttpClient::create();
-
-    $text = "Your GlitchaHitch password reset code is: $code\n\nThis code expires in 15 minutes.";
-    $html = '<p>Your GlitchaHitch password reset code is: <strong style="font-size:18px;letter-spacing:2px;">'
-        . htmlspecialchars($code, ENT_QUOTES) . '</strong></p><p>This code expires in 15 minutes.</p>';
-
-    $resp = $client->request('POST', 'https://send.api.mailtrap.io/api/send', [
-        'headers' => [
-            'Authorization' => 'Bearer ' . $token,
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
-        ],
-        'json' => [
-            'from' => ['email' => $from, 'name' => 'GlitchaHitch'],
-            'to' => [['email' => $user['email']]],
-            'subject' => 'Your password reset code',
-            'text' => $text,
-            'html' => $html,
-        ],
-        'timeout' => 15,
-    ]);
-
-    $status = $resp->getStatusCode();
-    $ok = $status >= 200 && $status < 300;
-    if (!$ok) {
-        error_log(sprintf(
-            'forgot_password_request: Mailtrap responded with HTTP %d: %s',
-            $status,
-            $resp->getContent(false)
-        ));
+    $sent = send_password_reset_code($user['email'], $user['display_name'] ?? '', $code);
+    if (!$sent) {
+        error_log('forgot_password_request: failed to dispatch password reset email');
+        json_out([
+            'ok' => false,
+            'sent' => false,
+            'error' => 'Unable to send reset email. Please try again later.'
+        ]);
     }
 
-    json_out(['ok' => $ok, 'sent' => $ok], $ok ? 200 : 502);
+    json_out(['ok' => true, 'sent' => true]);
 
 } catch (Throwable $e) {
     error_log('forgot_password_request: ' . $e->getMessage());

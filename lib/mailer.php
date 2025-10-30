@@ -131,6 +131,51 @@ function send_password_reset_code(string $email, string $name, string $code): bo
 }
 
 /**
+ * Send the signup verification PIN email.
+ */
+function send_signup_verification_pin(string $email, string $name, string $pin): bool
+{
+    $email = trim($email);
+    if ($email === '') {
+        return false;
+    }
+
+    $displayName = format_display_name($name, $email);
+    $safeName = htmlspecialchars($displayName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    $subject = 'Your GlitchaHitch signup PIN';
+    $textBody = sprintf(
+        "Hi %s,\n\nUse the verification PIN %s to complete your GlitchaHitch signup. This PIN expires in 15 minutes.\n\nIf you did not start this signup you can ignore this email.\n",
+        $displayName,
+        $pin
+    );
+    $htmlBody = sprintf(
+        '<p>Hi %s,</p><p>Use the verification PIN <strong>%s</strong> to complete your GlitchaHitch signup. This PIN expires in 15 minutes.</p><p>If you did not start this signup you can ignore this email.</p>',
+        $safeName,
+        htmlspecialchars($pin, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+    );
+
+    $payload = [
+        'from' => [
+            'email' => 'no-reply@glitchahitch.com',
+            'name'  => 'GlitchaHitch',
+        ],
+        'to' => [
+            [
+                'email' => $email,
+                'name'  => $displayName,
+            ],
+        ],
+        'subject' => $subject,
+        'text' => $textBody,
+        'html' => $htmlBody,
+        'category' => 'signup_verification',
+    ];
+
+    return send_mailtrap($payload);
+}
+
+/**
  * Send a welcome email asking the user to confirm their new account.
  */
 function send_signup_confirmation(string $email, string $name): bool
