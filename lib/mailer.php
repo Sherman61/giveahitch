@@ -17,6 +17,7 @@ use const ENT_QUOTES;
 use const ENT_SUBSTITUTE;
 
 const MAILTRAP_ENDPOINT = 'https://send.api.mailtrap.io/api/send';
+const MAILTRAP_FALLBACK_TOKEN = '9fcc8dcdd3dc9b4303cd9a60ce80bb29';
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
@@ -30,8 +31,20 @@ if (!defined('APP_ENV_LOADED') && class_exists(\Dotenv\Dotenv::class)) {
  */
 function mailtrap_token(): string
 {
-    $token = $_ENV['MAILTRAP_TOKEN'] ?? getenv('MAILTRAP_TOKEN') ?? '';
-    return is_string($token) ? trim($token) : '';
+    $token = $_ENV['MAILTRAP_TOKEN'] ?? getenv('MAILTRAP_TOKEN');
+    if (!is_string($token) || trim($token) === '') {
+        static $logged = false;
+        if (!$logged) {
+            error_log('mail: MAILTRAP_TOKEN missing; using built-in fallback inbox.');
+            $logged = true;
+        }
+
+        // Fall back to the shared Mailtrap inbox token so reset emails keep
+        // working in legacy environments that never configured an override.
+        $token = MAILTRAP_FALLBACK_TOKEN;
+    }
+
+    return trim($token);
 }
 
 /**
