@@ -4,7 +4,9 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__.'/../lib/auth.php';
 require_once __DIR__.'/../lib/session.php';
+require_once __DIR__.'/../lib/mailer.php';
 use function App\Auth\{find_user_by_email, create_user, csrf_verify};
+use function App\Mailer\send_signup_confirmation;
 
 \start_secure_session();
 
@@ -32,6 +34,7 @@ if (find_user_by_email($email)) {
 }
 
 $user = create_user($email, $pass, $display);
+send_signup_confirmation($user['email'] ?? $email, $user['display_name'] ?? $display);
 $_SESSION['user'] = $user;
 echo json_encode(['ok'=>true,'user'=>$user]);
 ?>

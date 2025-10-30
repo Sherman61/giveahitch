@@ -129,3 +129,51 @@ function send_password_reset_code(string $email, string $name, string $code): bo
 
     return send_mailtrap($payload);
 }
+
+/**
+ * Send a welcome email asking the user to confirm their new account.
+ */
+function send_signup_confirmation(string $email, string $name): bool
+{
+    $email = trim($email);
+    if ($email === '') {
+        return false;
+    }
+
+    $displayName = format_display_name($name, $email);
+    $safeName = htmlspecialchars($displayName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    $subject = 'Confirm your GlitchaHitch account';
+    $loginUrl = 'https://glitchahitch.com/login';
+    $textBody = sprintf(
+        "Hi %s,\n\nWelcome to GlitchaHitch! Please confirm your email by signing in at %s so we know we have the right address.\n\nIf you did not create this account you can ignore this email.\n",
+        $displayName,
+        $loginUrl
+    );
+    $loginLink = htmlspecialchars($loginUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $htmlBody = sprintf(
+        '<p>Hi %s,</p><p>Welcome to GlitchaHitch! Please confirm your email by signing in at <a href="%s">%s</a> so we know we have the right address.</p><p>If you did not create this account you can ignore this email.</p>',
+        $safeName,
+        $loginLink,
+        $loginLink
+    );
+
+    $payload = [
+        'from' => [
+            'email' => 'no-reply@glitchahitch.com',
+            'name'  => 'GlitchaHitch',
+        ],
+        'to' => [
+            [
+                'email' => $email,
+                'name'  => $displayName,
+            ],
+        ],
+        'subject' => $subject,
+        'text' => $textBody,
+        'html' => $htmlBody,
+        'category' => 'signup_confirmation',
+    ];
+
+    return send_mailtrap($payload);
+}
