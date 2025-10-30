@@ -126,12 +126,12 @@ function send_password_reset_code(string $email, string $name, string $code): bo
     $payload = [
         'from' => [
             'email' => 'no-reply@glitchahitch.com',
-            'name'  => 'GlitchaHitch',
+            'name' => 'GlitchaHitch',
         ],
         'to' => [
             [
                 'email' => $email,
-                'name'  => $displayName,
+                'name' => $displayName,
             ],
         ],
         'subject' => $subject,
@@ -171,12 +171,12 @@ function send_signup_verification_pin(string $email, string $name, string $pin):
     $payload = [
         'from' => [
             'email' => 'no-reply@glitchahitch.com',
-            'name'  => 'GlitchaHitch',
+            'name' => 'GlitchaHitch',
         ],
         'to' => [
             [
                 'email' => $email,
-                'name'  => $displayName,
+                'name' => $displayName,
             ],
         ],
         'subject' => $subject,
@@ -202,7 +202,7 @@ function send_signup_confirmation(string $email, string $name): bool
     $safeName = htmlspecialchars($displayName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
     $subject = 'Confirm your GlitchaHitch account';
-    $loginUrl = 'https://glitchahitch.com/login';
+    $loginUrl = 'https://glitchahitch.com/login.php';
     $textBody = sprintf(
         "Hi %s,\n\nWelcome to GlitchaHitch! Please confirm your email by signing in at %s so we know we have the right address.\n\nIf you did not create this account you can ignore this email.\n",
         $displayName,
@@ -219,12 +219,12 @@ function send_signup_confirmation(string $email, string $name): bool
     $payload = [
         'from' => [
             'email' => 'no-reply@glitchahitch.com',
-            'name'  => 'GlitchaHitch',
+            'name' => 'GlitchaHitch',
         ],
         'to' => [
             [
                 'email' => $email,
-                'name'  => $displayName,
+                'name' => $displayName,
             ],
         ],
         'subject' => $subject,

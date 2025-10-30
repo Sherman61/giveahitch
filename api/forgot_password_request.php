@@ -12,7 +12,9 @@ require_once __DIR__ . '/../lib/mailer.php';
 // Built-in classes referenced explicitly below.
 
 use function App\Mailer\send_password_reset_code;
-
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
 /**
  * Output JSON and terminate the script.
  *
@@ -101,32 +103,28 @@ try {
     $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
 
     // find user
-    try {
-        $stmt = $pdo->prepare('SELECT id, email, display_name FROM users WHERE email = ? LIMIT 1');
-        $stmt->execute([$email]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (PDOException $dbErr) {
-        error_log('forgot_password_request: failed to look up user: ' . $dbErr->getMessage());
-        json_out(['ok' => false, 'error' => 'Unable to process request right now.'], 500);
-    }
+    $stmt = $pdo->prepare('SELECT id, email, display_name FROM users WHERE email = ? LIMIT 1');
+    $stmt->execute([$email]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
     // Always respond 200 to avoid email enumeration
     if (!$user)
         json_out(['ok' => true, 'sent' => true]);
 
     // Create code (6 digits, not starting with 0)
-    try {
-        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-    } catch (Throwable $rngErr) {
-        error_log('forgot_password_request: failed generating code: ' . $rngErr->getMessage());
-        json_out(['ok' => false, 'error' => 'Unable to generate reset code. Please try again.'], 500);
-    }
+    $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     $expiresAt = (new DateTimeImmutable('+15 minutes'))->format('Y-m-d H:i:s');
 
     // Insert record. Older databases might not have the optional ip/ua columns yet,
     // so build the insert dynamically based on the existing schema.
     $columns = ['user_id', 'email', 'code'];
     $values = [$user['id'], $user['email'], $code];
-    $existingColumns = password_reset_columns($pdo);
+
+    try {
+        $columnStmt = $pdo->query('SHOW COLUMNS FROM password_resets');
+        $existingColumns = $columnStmt !== false ? $columnStmt->fetchAll(PDO::FETCH_COLUMN) : [];
+    } catch (Throwable $schemaErr) {
+        $existingColumns = [];
+    }
 
     if (in_array('ip', $existingColumns, true)) {
         $columns[] = 'ip';
@@ -142,23 +140,9 @@ try {
 
     $placeholders = implode(', ', array_fill(0, count($columns), '?'));
     $sql = sprintf('INSERT INTO password_resets (%s) VALUES (%s)', implode(', ', $columns), $placeholders);
+    $pdo->prepare($sql)->execute($values);
 
-    try {
-        $stmt = $pdo->prepare($sql);
-        if (!$stmt->execute($values)) {
-            throw new RuntimeException('Insert returned false');
-        }
-    } catch (Throwable $dbErr) {
-        error_log('forgot_password_request: failed to insert reset request: ' . $dbErr->getMessage());
-        json_out(['ok' => false, 'error' => 'Unable to create reset request right now.'], 500);
-    }
-
-    $sent = false;
-    try {
-        $sent = send_password_reset_code($user['email'], $user['display_name'] ?? '', $code);
-    } catch (Throwable $mailErr) {
-        error_log('forgot_password_request: mailer exception: ' . $mailErr->getMessage());
-    }
+    $sent = send_password_reset_code($user['email'], $user['display_name'] ?? '', $code);
     if (!$sent) {
         error_log('forgot_password_request: failed to dispatch password reset email');
         json_out([
@@ -171,6 +155,6 @@ try {
     json_out(['ok' => true, 'sent' => true]);
 
 } catch (Throwable $e) {
-    error_log('forgot_password_request: unhandled exception: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+    error_log('forgot_password_request: ' . $e->getMessage());
     json_out(['ok' => false, 'error' => 'Server error'], 500);
 }
