@@ -1,58 +1,45 @@
-const form = document.getElementById('forgot-form');
-const msg  = document.getElementById('msg');
-const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+// /assets/js/forgot-password.js
+(() => {
+  const form = document.getElementById('forgot-form');
+  const msg  = document.getElementById('msg');
+  if (!form || !msg) return;
 
-function show(type, text) {
-  msg.className = `alert alert-${type}`;
-  msg.textContent = text;
-  msg.classList.remove('d-none');
-}
+  const show = (text, type = 'info') => {
+    msg.className = `alert alert-${type}`;
+    msg.textContent = text;
+    msg.classList.remove('d-none');
+  };
 
-form?.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  msg.classList.add('d-none');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = new FormData(form);
+    const email = (data.get('email') || '').toString().trim();
+    const csrf  = (data.get('csrf')  || '').toString();
 
-  const fd = new FormData(form);
-  const email = (fd.get('email') || '').toString().trim();
-  if (!email) {
-    show('warning', 'Please enter your email address.');
-    return;
-  }
-
-  try {
-    const res = await fetch('/api/password_reset_request.php', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': csrf,
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify({ email }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok || !data.ok) {
-      if (data?.error === 'validation') {
-        show('warning', 'Please enter a valid email address.');
-        return;
-      }
-      if (data?.error === 'mail') {
-        show('danger', 'Unable to send the reset code. Please try again shortly.');
-        return;
-      }
-      show('danger', 'Something went wrong. Please try again.');
+    if (!email) {
+      show('Please enter your email.', 'warning');
       return;
     }
 
-    show('success', 'If we found an account for that email, we sent a reset code. Check your inbox.');
-    setTimeout(() => {
-      const url = new URL('/reset-password.php', window.location.origin);
-      url.searchParams.set('email', email);
-      window.location.href = url.toString();
-    }, 1500);
-  } catch (err) {
-    console.error('password_reset_request_failed', err);
-    show('danger', 'Network error. Please try again.');
-  }
-});
+    try {
+      show('Sending...', 'secondary');
+      const resp = await fetch('/api/forgot_password_request.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf, 'Accept': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ email, csrf })
+      });
+      const json = await resp.json().catch(() => ({}));
+
+      if (!resp.ok || json.ok === false) {
+        show(json.error || `Error ${resp.status}: Unable to send reset code.`, 'danger');
+        return;
+      }
+      show('If that email exists, a reset code was sent.', 'success');
+      // Optional: redirect to code entry page:
+      // window.location.href = `/reset-code.php?email=${encodeURIComponent(email)}`;
+    } catch (err) {
+      show('Network error. Please try again.', 'danger');
+    }
+  });
+})();
