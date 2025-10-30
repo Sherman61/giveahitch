@@ -50,7 +50,12 @@ $intentQuery  = $intentRideId ? ('?acceptRide=' . $intentRideId) : '';
       <input type="password" class="form-control" name="password" minlength="8" required autocomplete="new-password">
       <div class="form-text">At least 8 characters.</div>
     </div>
-    <button class="btn btn-primary w-100 py-2">Create account</button>
+    <div id="pinGroup" class="d-none">
+      <label class="form-label">Verification PIN</label>
+      <input type="text" class="form-control" name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code">
+      <div class="form-text">Enter the 6-digit PIN we emailed to you.</div>
+    </div>
+    <button type="submit" class="btn btn-primary w-100 py-2">Create account</button>
     <div class="text-center text-secondary">Already have an account? <a href="/login.php<?= $intentQuery ?>">Log in</a></div>
   </form>
 </div>
@@ -58,6 +63,16 @@ $intentQuery  = $intentRideId ? ('?acceptRide=' . $intentRideId) : '';
 <script>
 const form = document.getElementById('form');
 const msg  = document.getElementById('msg');
+const displayInput = form.querySelector('[name="display_name"]');
+const emailInput = form.querySelector('[name="email"]');
+const passwordInput = form.querySelector('[name="password"]');
+const pinGroup = document.getElementById('pinGroup');
+const pinInput = form.querySelector('[name="pin"]');
+const csrfInput = form.querySelector('input[name="csrf"]');
+const submitBtn = form.querySelector('button[type="submit"]');
+
+let awaitingPin = false;
+let pendingSignup = null;
 
 const STORAGE_KEY_ACCEPT_INTENT = 'ga_accept_ride_intent_v1';
 const ACCEPT_INTENT_TTL = 24 * 60 * 60 * 1000;
@@ -121,22 +136,63 @@ function show(type, text){
   msg.classList.remove('d-none');
 }
 
+function resetPinFlow({ clearPassword = false } = {}) {
+  awaitingPin = false;
+  pendingSignup = null;
+  pinGroup.classList.add('d-none');
+  pinInput.value = '';
+  displayInput.removeAttribute('readonly');
+  emailInput.removeAttribute('readonly');
+  passwordInput.removeAttribute('disabled');
+  if (clearPassword) {
+    passwordInput.value = '';
+  }
+  submitBtn.textContent = 'Create account';
+  submitBtn.disabled = false;
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   msg.classList.add('d-none');
 
-  const fd = new FormData(form);
-  const payload = Object.fromEntries(fd.entries());
+  const csrfToken = csrfInput.value;
+  let payload;
 
-  // simple front-end checks
-  if (!payload.display_name || !payload.email || !payload.password) {
-    show('warning','Please fill in all fields.');
-    return;
+  if (awaitingPin) {
+    const pin = (pinInput.value || '').replace(/\D/g, '');
+    if (!pin || pin.length !== 6) {
+      show('warning','Please enter the 6-digit PIN we sent to your email.');
+      return;
+    }
+    payload = {
+      csrf: csrfToken,
+      email: pendingSignup?.email || emailInput.value,
+      pin,
+    };
+  } else {
+    const displayName = displayInput.value.trim();
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!displayName || !email || !password) {
+      show('warning','Please fill in all fields.');
+      return;
+    }
+    if (password.length < 8) {
+      show('warning','Password must be at least 8 characters.');
+      return;
+    }
+
+    payload = {
+      csrf: csrfToken,
+      display_name: displayName,
+      email,
+      password,
+    };
   }
-  if (payload.password.length < 8) {
-    show('warning','Password must be at least 8 characters.');
-    return;
-  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = awaitingPin ? 'Verifying…' : 'Submitting…';
 
   try {
     const res = await fetch('/api/signup.php', {
@@ -145,13 +201,62 @@ form.addEventListener('submit', async (e) => {
       credentials: 'same-origin',
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      if (data.error === 'exists') return show('danger','That email is already registered.');
-      if (data.error === 'validation') return show('danger','Please check your inputs.');
-      return show('danger','Could not create account.');
+    const data = await res.json().catch(() => ({}));
+
+    if (data?.step === 'pin_required') {
+      awaitingPin = true;
+      pendingSignup = {
+        email: payload.email,
+        displayName: payload.display_name,
+      };
+      show('info', `Enter the 6-digit PIN we sent to ${payload.email}.`);
+      pinGroup.classList.remove('d-none');
+      pinInput.value = '';
+      pinInput.focus();
+      displayInput.setAttribute('readonly','readonly');
+      emailInput.setAttribute('readonly','readonly');
+      passwordInput.value = '';
+      passwordInput.setAttribute('disabled','disabled');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Verify & create account';
+      return;
     }
-    show('success','Account created! Redirecting…');
+
+    if (!res.ok || !data.ok) {
+      if (!awaitingPin) {
+        if (data.error === 'exists') {
+          show('danger','That email is already registered.');
+        } else if (data.error === 'validation') {
+          show('danger','Please check your inputs.');
+        } else if (data.error === 'pin_send_failed') {
+          show('danger','We could not send your PIN email. Please try again later.');
+        } else {
+          show('danger','Could not start signup. Please try again.');
+        }
+      } else {
+        if (data.error === 'pin_invalid') {
+          show('danger','That PIN was incorrect. Please try again.');
+        } else if (data.error === 'pin_expired') {
+          show('danger','Your PIN expired. Please start the signup again.');
+          resetPinFlow({ clearPassword: true });
+        } else if (data.error === 'no_pending' || data.error === 'email_mismatch') {
+          show('danger','Your signup session has expired. Please try again.');
+          resetPinFlow({ clearPassword: true });
+        } else if (data.error === 'exists') {
+          show('danger','That email is already registered.');
+          resetPinFlow();
+        } else {
+          show('danger','Could not verify your PIN.');
+        }
+      }
+      submitBtn.disabled = false;
+      submitBtn.textContent = awaitingPin ? 'Verify & create account' : 'Create account';
+      return;
+    }
+
+    const successMessage = data.message
+      || `Congratulations you have successfully created your account ${data.user?.display_name || pendingSignup?.displayName || ''}`.trim();
+    show('success', successMessage);
     const intent = readAcceptIntent();
     const target = intent?.rideId
       ? (() => {
@@ -163,7 +268,13 @@ form.addEventListener('submit', async (e) => {
     setTimeout(()=> location.href = target, 700);
   } catch(err){
     show('danger','Network error. Please try again.');
+    submitBtn.disabled = false;
+    submitBtn.textContent = awaitingPin ? 'Verify & create account' : 'Create account';
+    return;
   }
+  resetPinFlow();
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Create account';
 });
 </script>
 </body>
