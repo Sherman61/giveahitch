@@ -47,9 +47,33 @@ try {
     $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     $expiresAt = (new DateTimeImmutable('+15 minutes'))->format('Y-m-d H:i:s');
 
-    // Insert record
-    $ins = $pdo->prepare('INSERT INTO password_resets (user_id, email, code, ip, ua, expires_at) VALUES (?, ?, ?, ?, ?, ?)');
-    $ins->execute([$user['id'], $user['email'], $code, $ip, $ua, $expiresAt]);
+    // Insert record. Older databases might not have the optional ip/ua columns yet,
+    // so build the insert dynamically based on the existing schema.
+    $columns = ['user_id', 'email', 'code'];
+    $values = [$user['id'], $user['email'], $code];
+
+    try {
+        $columnStmt = $pdo->query('SHOW COLUMNS FROM password_resets');
+        $existingColumns = $columnStmt !== false ? $columnStmt->fetchAll(PDO::FETCH_COLUMN) : [];
+    } catch (Throwable $schemaErr) {
+        $existingColumns = [];
+    }
+
+    if (in_array('ip', $existingColumns, true)) {
+        $columns[] = 'ip';
+        $values[] = $ip;
+    }
+    if (in_array('ua', $existingColumns, true)) {
+        $columns[] = 'ua';
+        $values[] = $ua;
+    }
+
+    $columns[] = 'expires_at';
+    $values[] = $expiresAt;
+
+    $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+    $sql = sprintf('INSERT INTO password_resets (%s) VALUES (%s)', implode(', ', $columns), $placeholders);
+    $pdo->prepare($sql)->execute($values);
 
     $sent = send_password_reset_code($user['email'], $user['display_name'] ?? '', $code);
     if (!$sent) {
