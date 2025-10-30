@@ -55,7 +55,7 @@ $intentQuery  = $intentRideId ? ('?acceptRide=' . $intentRideId) : '';
       <input type="text" class="form-control" name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code">
       <div class="form-text">Enter the 6-digit PIN we emailed to you.</div>
     </div>
-    <button type="submit" class="btn btn-primary w-100 py-2">Create account</button>
+    <button class="btn btn-primary w-100 py-2">Create account</button>
     <div class="text-center text-secondary">Already have an account? <a href="/login.php<?= $intentQuery ?>">Log in</a></div>
   </form>
 </div>
