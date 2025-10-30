@@ -77,8 +77,12 @@ function user_by_id(int $id): ?array {
 
 function create_user(string $email, string $password, string $display): array {
     $hash = password_hash($password, PASSWORD_DEFAULT);
+    return create_user_with_hash($email, $hash, $display);
+}
+
+function create_user_with_hash(string $email, string $password_hash, string $display): array {
     $stmt = db()->prepare('INSERT INTO users(email,password_hash,display_name) VALUES(:e,:p,:d)');
-    $stmt->execute([':e' => strtolower(trim($email)), ':p' => $hash, ':d' => $display]);
+    $stmt->execute([':e' => strtolower(trim($email)), ':p' => $password_hash, ':d' => $display]);
     $id = (int)db()->lastInsertId();
     return ['id'=>$id,'email'=>strtolower(trim($email)),'display_name'=>$display,'is_admin'=>0];
 }
