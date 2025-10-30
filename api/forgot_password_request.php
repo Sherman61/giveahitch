@@ -12,7 +12,9 @@ require_once __DIR__ . '/../lib/mailer.php';
 // Built-in classes referenced explicitly below.
 
 use function App\Mailer\send_password_reset_code;
-
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
 /**
  * Output JSON and terminate the script.
  *
