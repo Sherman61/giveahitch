@@ -26,6 +26,13 @@ if (!defined('APP_ENV_LOADED') && class_exists(\Dotenv\Dotenv::class)) {
     define('APP_ENV_LOADED', true);
 }
 
+require_once __DIR__ . '/../vendor/autoload.php';
+
+if (!defined('APP_ENV_LOADED') && class_exists(\Dotenv\Dotenv::class)) {
+    \Dotenv\Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
+    define('APP_ENV_LOADED', true);
+}
+
 /**
  * Fetch the configured Mailtrap token from environment variables.
  */
