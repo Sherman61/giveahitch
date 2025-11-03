@@ -7,7 +7,8 @@ function start_secure_session(): void {
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
-        'domain' => 'hitch.shiyaswebsite.com',
+         // IMPORTANT: omit 'domain' so cookie is host-only (works on glitchahitch.com, ahitch.org, etc.)
+        // 'domain' => '',  // <— DO NOT set
         'secure' => true,
         'httponly' => true,
         'samesite' => 'Lax',

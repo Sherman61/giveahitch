@@ -2,10 +2,12 @@
 
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/ws.php';
 
 start_secure_session();
 $me   = \App\Auth\current_user();
 $csrf = \App\Auth\csrf_token();
+$wsToken = $me ? \App\WS\generate_token((int)$me['id']) : null;
 ?>
 <!doctype html>
 <html lang="en">
@@ -18,6 +20,9 @@ $csrf = \App\Auth\csrf_token();
   <script>
     window.ME_USER_ID = <?= $me ? (int) $me['id'] : 'null' ?>;
     window.CSRF_TOKEN = <?= json_encode($csrf, JSON_UNESCAPED_SLASHES) ?>;
+    window.API_BASE   = '/api';
+    window.WS_URL = <?= json_encode($_ENV['WS_URL'] ?? '') ?>;
+    window.WS_AUTH = <?= json_encode($wsToken ? ['userId' => (int)$me['id'], 'token' => $wsToken] : null, JSON_UNESCAPED_SLASHES) ?>;
   </script>
   <style>
     body {
@@ -163,7 +168,7 @@ $csrf = \App\Auth\csrf_token();
       <div class="col-lg-8">
         <div class="hero-card h-100 p-4 p-lg-5 shadow-sm">
           <div class="position-relative" style="z-index: 1;">
-            <h1 class="fw-bold mb-3">Find a ride without the endless group chats.</h1>
+            <!-- <h1 class="fw-bold mb-3">Find a ride without the endless group chats.</h1> -->
             <p class="lead mb-4">Discover live ride offers and requests from the Glitch a Hitch community. Search, filter, and connect instantly.</p>
             <div class="d-flex flex-wrap gap-2">
               <a class="btn btn-light text-primary fw-semibold" href="/create.php"><i class="bi bi-plus-circle me-1"></i>Post a ride</a>
@@ -219,8 +224,9 @@ $csrf = \App\Auth\csrf_token();
           <div class="col-md-2">
             <label class="form-label text-uppercase small text-secondary" for="sortOrder">Sort</label>
             <select id="sortOrder" class="form-select">
-              <option value="soonest">Soonest first</option>
-              <option value="latest">Latest first</option>
+              <option value="latest">Recent first</option>
+              <option value="soonest">Oldest first</option>
+               
             </select>
           </div>
           <div class="col-md-2 text-md-end">
@@ -262,9 +268,7 @@ $csrf = \App\Auth\csrf_token();
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
-  <script>
-    const API_BASE = '/api';
-  </script>
+  <script type="module" src="/assets/js/notification-bell.js"></script>
   <script src="/assets/js/rides.js" type="module"></script>
 </body>
 </html>

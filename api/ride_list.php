@@ -8,6 +8,10 @@ ini_set('display_errors','1');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/status.php';
+require_once __DIR__ . '/../lib/privacy.php';
+
+use function App\Status\{from_db, to_db};
 
 start_secure_session();
 
@@ -25,10 +29,11 @@ try {
     $isAdmin = $user && !empty($user['is_admin']);
 
     $sql = "SELECT
-              r.id, r.user_id, r.type, r.from_text, r.to_text, r.ride_datetime,
+              r.id, r.user_id, r.type, r.from_text, r.to_text, r.ride_datetime, r.ride_end_datetime,
               r.seats, r.package_only, r.note, r.phone, r.whatsapp,
               r.status, r.created_at,
-              u.display_name AS owner_display
+              u.display_name AS owner_display,
+              u.contact_privacy AS owner_contact_privacy
             FROM rides r
             LEFT JOIN users u ON u.id = r.user_id
             WHERE r.deleted = 0";
@@ -39,13 +44,16 @@ try {
     if (!$mine) {
         if (!$all || !$isAdmin) {
             $sql .= " AND r.status = :status";
-            $params[':status'] = 'open';
+            $params[':status'] = to_db('open');
         } else {
             if (isset($_GET['status']) && $_GET['status'] !== '') {
                 $sql .= " AND r.status = :status";
-                $params[':status'] = $_GET['status'];
+                $params[':status'] = to_db((string)$_GET['status']);
             }
         }
+
+        $sql .= " AND ((r.ride_end_datetime IS NOT NULL AND r.ride_end_datetime >= DATE_SUB(NOW(), INTERVAL 48 HOUR))
+                      OR (r.ride_end_datetime IS NULL AND (r.ride_datetime IS NULL OR r.ride_datetime >= DATE_SUB(NOW(), INTERVAL 48 HOUR))))";
     }
 
     if ($type === 'offer' || $type === 'request') {
@@ -67,7 +75,7 @@ try {
         $params[':uid'] = (int)$user['id'];
     }
 
-    $sql .= " ORDER BY COALESCE(r.ride_datetime, r.created_at) ASC LIMIT :lim";
+    $sql .= " ORDER BY COALESCE(r.ride_datetime, r.ride_end_datetime, r.created_at) ASC LIMIT :lim";
 
     $stmt = $pdo->prepare($sql);
     foreach ($params as $k => $v) $stmt->bindValue($k, $v);
@@ -75,6 +83,24 @@ try {
     $stmt->execute();
 
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $rideIds = array_map('intval', array_column($rows, 'id'));
+    $matchCounts = [];
+    if ($rideIds) {
+      $ph = implode(',', array_fill(0, count($rideIds), '?'));
+      $countSql = "
+        SELECT ride_id, status, COUNT(*) AS total
+        FROM ride_matches
+        WHERE ride_id IN ($ph)
+        GROUP BY ride_id, status";
+      $countStmt = $pdo->prepare($countSql);
+      $countStmt->execute($rideIds);
+      while ($row = $countStmt->fetch(PDO::FETCH_ASSOC)) {
+        $rid    = (int)$row['ride_id'];
+        $status = from_db($row['status']);
+        $matchCounts[$rid][$status] = (int)$row['total'];
+      }
+    }
 
     // Attach `confirmed` block per ride (if any match is accepted/in_progress/completed)
     $out = [];
@@ -88,7 +114,7 @@ try {
       JOIN users du ON du.id = m.driver_user_id
       JOIN users pu ON pu.id = m.passenger_user_id
       WHERE m.ride_id = :rid
-        AND m.status IN ('accepted','in_progress','completed')
+        AND m.status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','confirmed','in_progress','completed'])) . ")
       ORDER BY COALESCE(m.confirmed_at, m.updated_at, m.created_at) DESC
       LIMIT 1";
     $mStmt = $pdo->prepare($matchSql);
@@ -109,14 +135,63 @@ try {
           'passenger_display'  => $m['passenger_display'],
           'passenger_phone'    => $m['passenger_phone'],
           'passenger_whatsapp' => $m['passenger_whatsapp'],
+          'updated_at'         => $m['updated_at'],
+          'confirmed_at'       => $m['confirmed_at'],
+          'created_at'         => $m['created_at'],
         ];
         if ($myId && ($confirmed['driver_user_id'] === $myId || $confirmed['passenger_user_id'] === $myId)) {
           $ratingMatchIds[$confirmed['match_id']] = true;
         }
       }
 
+      $r['status']         = from_db($r['status'] ?? 'open');
+      $viewerIsOwner = $myId && (int)$r['user_id'] === $myId;
+      $viewerHasMatch = false;
+      $matchStatus = null;
+      $matchChangedAt = null;
+      if ($confirmed) {
+        $confirmed['status'] = from_db($confirmed['status']);
+        $confirmed['match_changed_at'] = $confirmed['updated_at'] ?? $confirmed['confirmed_at'] ?? $confirmed['created_at'] ?? null;
+        $matchStatus = $confirmed['status'] ?? null;
+        $matchChangedAt = $confirmed['match_changed_at'] ?? null;
+        if ($myId && (($confirmed['driver_user_id'] ?? 0) === $myId || ($confirmed['passenger_user_id'] ?? 0) === $myId)) {
+          $viewerHasMatch = true;
+        }
+        $viewerCanSeeMatch = $viewerHasMatch || $viewerIsOwner || $isAdmin;
+        if (!$viewerCanSeeMatch) {
+          $confirmed['driver_phone'] = null;
+          $confirmed['driver_whatsapp'] = null;
+          $confirmed['passenger_phone'] = null;
+          $confirmed['passenger_whatsapp'] = null;
+        }
+      }
       $r['confirmed']      = $confirmed;
       $r['already_rated']  = false; // default; updated below if the current user has rated this match
+      $r['match_counts']   = $matchCounts[(int)$r['id']] ?? [];
+      $r['owner_role']     = $r['type'] === 'offer' ? 'driver' : 'passenger';
+      $r['other_role']     = $r['owner_role'] === 'driver' ? 'passenger' : 'driver';
+
+      $ownerPrivacy = (int)($r['owner_contact_privacy'] ?? 1);
+
+      $visibility = \App\Privacy\evaluate($user, [
+        'privacy' => $ownerPrivacy,
+        'viewer_is_owner' => $viewerIsOwner,
+        'viewer_is_target' => $viewerIsOwner,
+        'viewer_is_admin' => $isAdmin,
+        'viewer_logged_in' => (bool)$user,
+        'viewer_has_active_match' => $viewerHasMatch,
+        'match_status' => $matchStatus,
+        'match_changed_at' => $matchChangedAt,
+        'target_has_active_open_ride' => ($r['status'] === 'open'),
+      ]);
+
+      if (empty($visibility['visible'])) {
+        $r['phone'] = null;
+        $r['whatsapp'] = null;
+      }
+      $r['contact_visibility'] = $visibility;
+      $r['contact_notice'] = $visibility['visible'] ? null : ($visibility['reason'] ?? '');
+      unset($r['owner_contact_privacy']);
       $out[] = $r;
     }
 

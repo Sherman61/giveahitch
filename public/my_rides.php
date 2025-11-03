@@ -6,7 +6,7 @@ ini_set('display_errors', '1');
 ini_set('display_startup_errors', '1'); 
 ini_set('log_errors', '1');                 // still log to the PHP error log
 error_reporting(E_ALL);
- 
+  $me   = \App\Auth\current_user();
 ?>
 <!doctype html>
 <html lang="en">
@@ -30,8 +30,13 @@ error_reporting(E_ALL);
     </a>
     <div class="ms-auto d-flex align-items-center gap-2">
       <span class="navbar-text small text-muted d-none d-md-inline">
-        <i class="bi bi-person-circle me-1"></i><?= htmlspecialchars($user['display_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+        <?= htmlspecialchars($user['display_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+       <a class="btn btn-outline-secondary btn-sm" href="user.php?id=<?= (int)$me['id'] ?>"
+       title="View profile" aria-label="View profile">
+      <i class="bi bi-person-circle me-1"></i>
+    </a>
       </span>
+       
       <a class="btn btn-outline-secondary btn-sm" href="/rides.php"><i class="bi bi-map me-1"></i>All rides</a>
       <a class="btn btn-outline-danger btn-sm" href="/logout.php"><i class="bi bi-box-arrow-right me-1"></i>Logout</a>
     </div>

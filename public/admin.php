@@ -57,7 +57,7 @@ $csrf = \App\Auth\csrf_token();
   </div>
 </div>
 
-<script>const API_BASE='/glitchahitch/api'; const CSRF='<?= $csrf ?>';</script>
+<script>const API_BASE='/api'; const CSRF='<?= $csrf ?>';</script>
 <script>
 async function fetchAll(){
   const res=await fetch(`${API_BASE}/ride_list.php?all=1`,{credentials:'same-origin'});

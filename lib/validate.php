@@ -15,6 +15,9 @@ function validate_ride(array $in): array {
     $to   = trim((string)($in['to_text']   ?? ''));
     if (mb_strlen($from) < 2 || mb_strlen($from) > 255) $errors['from_text']='Enter a valid From location.';
     if (mb_strlen($to)   < 2 || mb_strlen($to)   > 255) $errors['to_text']='Enter a valid To location.';
+    if ($from !== '' && $to !== '' && mb_strtolower($from) === mb_strtolower($to)) {
+        $errors['locations'] = 'From and To must be different.';
+    }
     $data['from_text']=$from; $data['to_text']=$to;
 
     $seats = (int)($in['seats'] ?? 1);
@@ -30,9 +33,18 @@ function validate_ride(array $in): array {
 
     $phone    = trim((string)($in['phone'] ?? ''));
     $whatsapp = trim((string)($in['whatsapp'] ?? ''));
-    $re = '/^\+?[0-9\s\-\(\)]{7,20}$/';
-    if ($phone !== '' && !preg_match($re, $phone))       $errors['phone']='Invalid phone number.';
-    if ($whatsapp !== '' && !preg_match($re, $whatsapp)) $errors['whatsapp']='Invalid WhatsApp.';
+    $re = '/^\+?[0-9\s\-\(\)]+$/';
+    $validDigits = static function (string $value): bool {
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+        $length = strlen($digits);
+        return $length >= 7 && $length <= 15;
+    };
+    if ($phone !== '' && (!preg_match($re, $phone) || !$validDigits($phone))) {
+        $errors['phone']='Invalid phone number.';
+    }
+    if ($whatsapp !== '' && (!preg_match($re, $whatsapp) || !$validDigits($whatsapp))) {
+        $errors['whatsapp']='Invalid WhatsApp.';
+    }
     if ($phone === '' && $whatsapp === '') $errors['contact']='Provide phone or WhatsApp.';
     $data['phone']=$phone; $data['whatsapp']=$whatsapp;
 

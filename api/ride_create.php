@@ -18,14 +18,86 @@ csrf_verify((string)($in['csrf'] ?? ''));
 $type = (string)($in['type'] ?? '');
 $from = trim((string)($in['from_text'] ?? ''));
 $to   = trim((string)($in['to_text']   ?? ''));
-$rideDt = (string)($in['ride_datetime'] ?? ''); // 'YYYY-MM-DD HH:MM:SS' or '' (nullable)
+$rideDtRaw = (string)($in['ride_datetime'] ?? '');
+$rideEndRaw = (string)($in['ride_end_datetime'] ?? '');
 $seats  = isset($in['seats']) ? max(0, (int)$in['seats']) : 1;
 $pkg    = !empty($in['package_only']) ? 1 : 0;
 $note   = trim((string)($in['note'] ?? ''));
 $phone  = trim((string)($in['phone'] ?? ''));
 $wa     = trim((string)($in['whatsapp'] ?? ''));
 
+$normalizeDigits = static function (string $value): string {
+  return preg_replace('/\D+/', '', $value) ?? '';
+};
+
+$isValidPhone = static function (string $value) use ($normalizeDigits): bool {
+  if ($value === '') {
+    return true;
+  }
+  if (!preg_match('/^\+?[0-9\s\-()]+$/', $value)) {
+    return false;
+  }
+  $digits = $normalizeDigits($value);
+  $len = strlen($digits);
+  return $len >= 7 && $len <= 15;
+};
+
+$parseInputDate = static function (string $value): ?DateTimeImmutable {
+  $value = trim($value);
+  if ($value === '') {
+    return null;
+  }
+  $value = str_replace('T', ' ', $value);
+  $value = (string)preg_replace('/\.(\d+)$/', '', $value);
+  $formats = ['Y-m-d H:i:s', 'Y-m-d H:i'];
+  foreach ($formats as $fmt) {
+    $dt = \DateTimeImmutable::createFromFormat($fmt, $value);
+    if ($dt instanceof \DateTimeImmutable) {
+      return $dt;
+    }
+  }
+  return null;
+};
+
+$rideDtObj = $parseInputDate($rideDtRaw);
+if ($rideDtRaw !== '' && !$rideDtObj) {
+  http_response_code(422);
+  echo json_encode(['ok'=>false,'error'=>'validation']);
+  exit;
+}
+
+$rideEndObj = $parseInputDate($rideEndRaw);
+if ($rideEndRaw !== '' && !$rideEndObj) {
+  http_response_code(422);
+  echo json_encode(['ok'=>false,'error'=>'validation']);
+  exit;
+}
+
+if ($rideDtObj && $rideEndObj && $rideEndObj <= $rideDtObj) {
+  http_response_code(422);
+  echo json_encode(['ok'=>false,'error'=>'validation']);
+  exit;
+}
+
+$rideDt = $rideDtObj ? $rideDtObj->format('Y-m-d H:i:s') : null;
+$rideEndDt = $rideEndObj ? $rideEndObj->format('Y-m-d H:i:s') : null;
+
 if (!in_array($type, ['offer','request'], true) || $from==='' || $to==='') {
+  http_response_code(422);
+  echo json_encode(['ok'=>false,'error'=>'validation']); exit;
+}
+
+if (mb_strlen($from) < 2 || mb_strlen($from) > 255 || mb_strlen($to) < 2 || mb_strlen($to) > 255) {
+  http_response_code(422);
+  echo json_encode(['ok'=>false,'error'=>'validation']); exit;
+}
+
+if (strcasecmp($from, $to) === 0) {
+  http_response_code(422);
+  echo json_encode(['ok'=>false,'error'=>'validation']); exit;
+}
+
+if (($phone === '' && $wa === '') || !$isValidPhone($phone) || !$isValidPhone($wa)) {
   http_response_code(422);
   echo json_encode(['ok'=>false,'error'=>'validation']); exit;
 }
@@ -35,12 +107,13 @@ $pdo->beginTransaction();
 
 try {
   $stmt = $pdo->prepare("
-    INSERT INTO rides (user_id,type,from_text,to_text,ride_datetime,seats,package_only,note,phone,whatsapp,status,deleted,created_at,updated_at)
-    VALUES (:u,:t,:f,:to,:dt,:seats,:pkg,:note,:ph,:wa,'open',0,NOW(),NOW())
+    INSERT INTO rides (user_id,type,from_text,to_text,ride_datetime,ride_end_datetime,seats,package_only,note,phone,whatsapp,status,deleted,created_at,updated_at)
+    VALUES (:u,:t,:f,:to,:dt,:dt_end,:seats,:pkg,:note,:ph,:wa,'open',0,NOW(),NOW())
   ");
   $stmt->execute([
     ':u'=>$uid, ':t'=>$type, ':f'=>$from, ':to'=>$to,
-    ':dt'=> ($rideDt !== '' ? $rideDt : null),
+    ':dt'=> $rideDt,
+    ':dt_end'=> $rideEndDt,
     ':seats'=>$seats, ':pkg'=>$pkg, ':note'=>($note!==''?$note:null),
     ':ph'=>($phone!==''?$phone:null), ':wa'=>($wa!==''?$wa:null),
   ]);

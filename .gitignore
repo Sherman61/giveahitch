@@ -1,4 +1,8 @@
 /node_modules
+
 /config
 .env
+/ws/node_modules.env
 /ws/node_modules
+# Ignore Socket.IO workspace deps
+ws/node_modules/
