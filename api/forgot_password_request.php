@@ -8,7 +8,7 @@ if (class_exists(Dotenv\Dotenv::class)) {
     Dotenv\Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
     $configLoaded = true;
 }
-require_once __DIR__ . '/../config/db.php'; // must define $pdo (PDO)
+require_once __DIR__ . '/../config/db.php';
 
 use Symfony\Component\HttpClient\HttpClient;
 
@@ -25,8 +25,15 @@ try {
     if ($email === '')
         json_out(['ok' => false, 'error' => 'Email is required'], 422);
 
+    // Obtain database connection from shared helper.
+    $pdo = db();
+
     // Basic rate-limit (per email/IP)
-    $ip = inet_pton($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1');
+    $rawIp = $_SERVER['REMOTE_ADDR'] ?? '';
+    $ip = $rawIp !== '' ? inet_pton($rawIp) : null;
+    if ($ip === false) {
+        $ip = null;
+    }
     $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
 
     // find user
