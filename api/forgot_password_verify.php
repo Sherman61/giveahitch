@@ -8,6 +8,8 @@ if (class_exists(Dotenv\Dotenv::class)) {
 }
 require_once __DIR__ . '/../config/db.php';
 
+$pdo = db();
+
 function out($a,$c=200){http_response_code($c);echo json_encode($a,JSON_UNESCAPED_SLASHES);exit;}
 
 try {

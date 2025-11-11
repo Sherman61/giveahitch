@@ -119,15 +119,20 @@ function send_password_reset_code(string $email, string $name, string $code): bo
     $safeName = htmlspecialchars($displayName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
     $subject = 'Your GlitchaHitch password reset code';
+    $resetUrl = 'https://glitchahitch.com/reset-code.php?email=' . rawurlencode($email);
     $textBody = sprintf(
-        "Hi %s,\n\nUse the verification code %s to reset your GlitchaHitch password. This code expires in 15 minutes.\n\nIf you did not request a reset you can ignore this email.\n",
+        "Hi %s,\n\nUse the verification code %s to reset your GlitchaHitch password. Enter the code at %s within 15 minutes.\n\nIf you did not request a reset you can ignore this email.\n",
         $displayName,
-        $code
+        $code,
+        $resetUrl
     );
+    $safeResetUrl = htmlspecialchars($resetUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $htmlBody = sprintf(
-        '<p>Hi %s,</p><p>Use the verification code <strong>%s</strong> to reset your GlitchaHitch password. This code expires in 15 minutes.</p><p>If you did not request a reset you can ignore this email.</p>',
+        '<p>Hi %s,</p><p>Use the verification code <strong>%s</strong> to reset your GlitchaHitch password. Enter the code at <a href="%s">%s</a> within 15 minutes.</p><p>If you did not request a reset you can ignore this email.</p>',
         $safeName,
-        htmlspecialchars($code, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+        htmlspecialchars($code, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        $safeResetUrl,
+        $safeResetUrl
     );
 
     $payload = [
