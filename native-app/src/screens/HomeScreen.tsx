@@ -1,10 +1,17 @@
 import { FC, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { NotificationBadge } from '@/components/NotificationBadge';
+import { PrimaryButton } from '@/components/PrimaryButton';
+import { Card } from '@/components/Card';
+import { NotificationCard } from '@/components/NotificationCard';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useNotificationFeed } from '@/hooks/useNotificationFeed';
+import { palette } from '@/constants/colors';
+import { spacing } from '@/constants/layout';
 
 export const HomeScreen: FC = () => {
   const { expoPushToken, lastNotification, registerAsync, scheduleLocalTest } = useNotifications();
+  const { notifications, loading, refresh } = useNotificationFeed();
   const [permissionRequested, setPermissionRequested] = useState(false);
 
   const onRegister = async () => {
@@ -13,38 +20,53 @@ export const HomeScreen: FC = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}
+    >
       <Text style={styles.title}>GlitchaHitch Mobile</Text>
       <Text style={styles.subtitle}>Manage rides, matches, and alerts on the go.</Text>
 
-      <TouchableOpacity style={styles.button} onPress={onRegister}>
-        <Text style={styles.buttonText}>Enable Push Notifications</Text>
-      </TouchableOpacity>
+      <Card>
+        <PrimaryButton label="Enable Push Notifications" onPress={onRegister} style={styles.cardButton} />
+        <PrimaryButton
+          label="Send Test Notification"
+          onPress={scheduleLocalTest}
+          variant="secondary"
+          accessory={<NotificationBadge count={lastNotification ? 1 : 0} />}
+        />
+        {permissionRequested && !expoPushToken && (
+          <Text style={styles.warning}>Grant notification permissions in device settings.</Text>
+        )}
+        {expoPushToken && (
+          <View style={styles.tokenBox}>
+            <Text style={styles.tokenLabel}>Expo Push Token</Text>
+            <Text selectable style={styles.tokenText}>
+              {expoPushToken}
+            </Text>
+          </View>
+        )}
+      </Card>
 
-      <TouchableOpacity style={[styles.button, styles.secondary]} onPress={scheduleLocalTest}>
-        <Text style={styles.buttonText}>Send Test Notification</Text>
-        <NotificationBadge count={lastNotification ? 1 : 0} />
-      </TouchableOpacity>
-
-      {permissionRequested && !expoPushToken && (
-        <Text style={styles.warning}>Grant notification permissions in device settings.</Text>
+      <Text style={styles.sectionTitle}>Recent Notifications</Text>
+      {notifications.map((item) => (
+        <NotificationCard key={item.id} notification={item} />
+      ))}
+      {!notifications.length && !loading && (
+        <Text style={styles.emptyState}>No notifications yet. Trigger one from the dashboard.</Text>
       )}
-      {expoPushToken && (
-        <View style={styles.tokenBox}>
-          <Text style={styles.tokenLabel}>Expo Push Token</Text>
-          <Text selectable style={styles.tokenText}>{expoPushToken}</Text>
-        </View>
-      )}
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-    padding: 24,
-    justifyContent: 'center',
+    backgroundColor: palette.background,
+  },
+  content: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   title: {
     fontSize: 28,
@@ -53,49 +75,41 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    marginBottom: 24,
-    color: '#6c757d',
-  },
-  button: {
-    backgroundColor: '#0069d9',
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 8,
-    marginBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  secondary: {
-    backgroundColor: '#0d6efd',
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
+    marginBottom: spacing.lg,
+    color: palette.muted,
   },
   warning: {
-    color: '#dc3545',
-    marginTop: 8,
+    color: palette.danger,
+    marginTop: spacing.sm,
   },
   tokenBox: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#fff',
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
     borderRadius: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 6,
-    elevation: 2,
+    padding: spacing.md,
   },
   tokenLabel: {
     fontSize: 12,
-    color: '#6c757d',
+    color: palette.muted,
     marginBottom: 4,
     textTransform: 'uppercase',
   },
   tokenText: {
     fontSize: 12,
-    color: '#212529',
+    color: palette.text,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: palette.text,
+    marginBottom: spacing.md,
+  },
+  emptyState: {
+    color: palette.muted,
+    fontStyle: 'italic',
+  },
+  cardButton: {
+    marginBottom: spacing.md,
   },
 });

@@ -1,5 +1,6 @@
 import { FC } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { palette } from '@/constants/colors';
 
 interface Props {
   count?: number;
@@ -20,7 +21,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
-    backgroundColor: '#dc3545',
+    backgroundColor: palette.danger,
     alignItems: 'center',
   },
   text: {

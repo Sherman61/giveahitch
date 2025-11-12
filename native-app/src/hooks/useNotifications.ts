@@ -1,10 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import * as Application from 'expo-application';
+import { registerPushToken } from '@/api/notifications';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: false,
     shouldSetBadge: false,
   }),
@@ -43,8 +47,37 @@ export function useNotifications() {
     }
 
     const tokenData = await Notifications.getExpoPushTokenAsync();
-    setExpoPushToken(tokenData.data);
-    return tokenData.data;
+    const token = tokenData.data;
+    setExpoPushToken(token);
+
+    const deviceId =
+      Application.androidId ??
+      Application.getIosIdForVendorAsync?.().catch(() => null) ??
+      Device.osInternalBuildId ??
+      Device.osBuildId ??
+      Device.modelName ??
+      'unknown-device';
+
+    try {
+      const iosVendorId =
+        Platform.OS === 'ios' && Application.getIosIdForVendorAsync
+          ? await Application.getIosIdForVendorAsync()
+          : null;
+      await registerPushToken({
+        device_id:
+          iosVendorId ??
+          Application.androidId ??
+          Device.osInternalBuildId ??
+          Device.osBuildId ??
+          Device.modelName ??
+          'unknown-device',
+        expo_push_token: token,
+      });
+    } catch (error) {
+      console.warn('Failed to register push token', error);
+    }
+
+    return token;
   }, []);
 
   const scheduleLocalTest = useCallback(async () => {
