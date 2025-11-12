@@ -1,9 +1,9 @@
 import { FC } from 'react';
 import { ScrollView, StyleSheet, Text, RefreshControl, View } from 'react-native';
-import { RideCard } from '@/components/RideCard';
+import { RideList } from '@/components/RideList';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { useRides } from '@/hooks/useRides';
-import { UserProfile } from '@/api/auth';
+import { UserProfile } from '@/types/user';
 import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 
@@ -35,15 +35,12 @@ export const RidesScreen: FC<Props> = ({ user, onRequestLogin }) => {
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      {!rides.length && !loading && !error && (
-        <Text style={styles.empty}>No rides found. Pull to refresh or schedule a new ride on the dashboard.</Text>
+      {!loading && !error && (
+        <RideList
+          rides={rides}
+          emptyMessage="No rides found. Pull to refresh or schedule a new ride on the dashboard."
+        />
       )}
-
-      {rides.map((ride) => (
-        <RideCard key={ride.id} ride={ride} />
-      ))}
     </ScrollView>
   );
 };
@@ -79,9 +76,5 @@ const styles = StyleSheet.create({
   error: {
     color: palette.danger,
     marginBottom: spacing.md,
-  },
-  empty: {
-    color: palette.muted,
-    fontStyle: 'italic',
   },
 });

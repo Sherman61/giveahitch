@@ -36,9 +36,7 @@ export const RideCard: FC<Props> = ({ ride }) => {
   return (
     <Card>
       <View style={styles.header}>
-        <Text style={styles.route}>
-          {ride.origin} -> {ride.destination}
-        </Text>
+        <Text style={styles.route}>{`${ride.origin} -> ${ride.destination}`}</Text>
         <Text style={[styles.status, { color: statusColor[ride.status] }]}>{statusCopy[ride.status]}</Text>
       </View>
       <Text style={styles.time}>{dayjs(ride.departureTime).format('MMM D, h:mm A')}</Text>

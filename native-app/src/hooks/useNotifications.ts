@@ -50,23 +50,19 @@ export function useNotifications() {
     const token = tokenData.data;
     setExpoPushToken(token);
 
-    const deviceId =
-      Application.androidId ??
-      Application.getIosIdForVendorAsync?.().catch(() => null) ??
-      Device.osInternalBuildId ??
-      Device.osBuildId ??
-      Device.modelName ??
-      'unknown-device';
-
     try {
       const iosVendorId =
         Platform.OS === 'ios' && Application.getIosIdForVendorAsync
           ? await Application.getIosIdForVendorAsync()
           : null;
+      const androidId =
+        Platform.OS === 'android' && typeof (Application as Record<string, unknown>).getAndroidIdAsync === 'function'
+          ? await (Application as { getAndroidIdAsync: () => Promise<string | null> }).getAndroidIdAsync()
+          : null;
       await registerPushToken({
         device_id:
           iosVendorId ??
-          Application.androidId ??
+          androidId ??
           Device.osInternalBuildId ??
           Device.osBuildId ??
           Device.modelName ??

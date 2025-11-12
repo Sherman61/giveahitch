@@ -2,7 +2,8 @@ import { FC, useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Card } from '@/components/Card';
-import { login, AuthResponse, UserProfile } from '@/api/auth';
+import { login, AuthResponse } from '@/api/auth';
+import { UserProfile } from '@/types/user';
 import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 
