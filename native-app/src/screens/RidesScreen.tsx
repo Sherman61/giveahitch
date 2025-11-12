@@ -38,6 +38,9 @@ export const RidesScreen: FC<Props> = ({ user, onRequestLogin }) => {
       {!loading && !error && (
         <RideList
           rides={rides}
+          currentUser={user ?? null}
+          onRequireLogin={onRequestLogin}
+          onRideAccepted={refresh}
           emptyMessage="No rides found. Pull to refresh or schedule a new ride on the dashboard."
         />
       )}

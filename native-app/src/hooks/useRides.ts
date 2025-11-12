@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RideSummary } from '@/components/RideCard';
+import { RideSummary } from '@/types/rides';
 import { fetchUpcomingRides } from '@/api/rides';
 
 export function useRides(pollEveryMs = 20000) {
