@@ -27,6 +27,7 @@
 - Follow existing history: short, imperative commit subjects (`Fix forgot password flow`, `Handle reset email failures`). Group related changes per commit.
 - PRs should describe context, testing performed, and any config changes (.env keys, schema updates). Include screenshots or cURL output when altering UI/API responses.
 - Reference issue numbers or Trello cards where possible, and call out any new environment variables (`APP_KEY`, `MAILTRAP_TOKEN`) in the PR body.
+- Mobile code lives under `native-app/native-app`. When working on that app, stage/commit from that subdirectory but always push the top-level repo afterward so `origin/native-app` stays current (`git add -A`, `git commit -m "..."`, `git push origin native-app`).
 
 ## Security & Configuration Tips
 - Keep `.env` (or environment variables) synced across PHP and Node servers—`APP_KEY` secures password reset tokens, while `MAILTRAP_TOKEN` handles outbound email.
