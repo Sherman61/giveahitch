@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../lib/session.php';
 require_once __DIR__ . '/../../lib/auth.php';
 
-use function App\Auth\{require_login, assert_csrf_and_get_input, start_secure_session};
+use function App\Auth\{assert_csrf_and_get_input, require_login, start_secure_session};
 
 start_secure_session();
 $user = require_login();
@@ -21,26 +21,46 @@ function respond(int $status, array $payload): void {
   exit;
 }
 
+function trim_user_agent(?string $ua): ?string {
+  if ($ua === null) {
+    return null;
+  }
+  $ua = trim($ua);
+  if ($ua === '') {
+    return null;
+  }
+  if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+    if (mb_strlen($ua, 'UTF-8') > 255) {
+      return mb_substr($ua, 0, 255, 'UTF-8');
+    }
+    return $ua;
+  }
+  if (strlen($ua) > 255) {
+    return substr($ua, 0, 255);
+  }
+  return $ua;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
   header('Allow: POST');
   respond(405, ['ok' => false, 'error' => 'method_not_allowed']);
 }
 
 $input = assert_csrf_and_get_input();
-$endpoint = isset($input['expo_push_token']) ? trim((string)$input['expo_push_token']) : '';
-$deviceId = isset($input['device_id']) ? trim((string)$input['device_id']) : '';
-$platform = isset($input['platform']) ? trim((string)$input['platform']) : '';
+$endpoint = isset($input['endpoint']) ? trim((string)$input['endpoint']) : '';
+$keys = isset($input['keys']) && is_array($input['keys']) ? $input['keys'] : [];
+$p256dh = isset($keys['p256dh']) ? trim((string)$keys['p256dh']) : '';
+$auth = isset($keys['auth']) ? trim((string)$keys['auth']) : '';
+$ua = isset($input['ua']) ? (string)$input['ua'] : ($_SERVER['HTTP_USER_AGENT'] ?? null);
+$ua = trim_user_agent(is_string($ua) ? $ua : null);
 
-if ($endpoint === '') {
-  respond(422, ['ok' => false, 'error' => 'validation', 'reason' => 'Missing Expo push token']);
+if ($endpoint === '' || $p256dh === '' || $auth === '') {
+  respond(422, [
+    'ok' => false,
+    'error' => 'validation',
+    'reason' => 'Missing subscription parameters.',
+  ]);
 }
-
-$deviceLabel = $deviceId !== '' ? $deviceId : 'unknown-device';
-$platformLabel = $platform !== '' ? $platform : 'unknown-platform';
-$ua = sprintf('expo-native %s %s', $platformLabel, $deviceLabel);
-
-$p256dh = substr(base64_encode(hash('sha256', $endpoint . $deviceLabel, true)), 0, 255);
-$auth = substr(hash('sha1', $endpoint . $platformLabel, false), 0, 255);
 
 $pdo = db();
 $stmt = $pdo->prepare(
@@ -52,7 +72,7 @@ $stmt = $pdo->prepare(
                            ua = VALUES(ua)'
 );
 $stmt->execute([
-  ':uid' => $uid,
+  ':uid' => $uid > 0 ? $uid : null,
   ':endpoint' => $endpoint,
   ':p256dh' => $p256dh,
   ':auth' => $auth,
