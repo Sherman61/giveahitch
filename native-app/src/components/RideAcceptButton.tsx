@@ -8,7 +8,7 @@ interface Props {
   ownerId: number | null;
   status: string;
   currentUserId?: number | null;
-  onAccepted: () => void;
+  onAccepted: (rideId: number, status: string) => void;
   onRequireLogin: () => void;
 }
 
@@ -42,7 +42,7 @@ export const RideAcceptButton: FC<Props> = ({
       setLoading(true);
       await acceptRide(rideId);
       Alert.alert('Request sent', 'The ride owner has been notified.');
-      onAccepted();
+      onAccepted(rideId, 'pending');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to accept ride';
       Alert.alert('Accept failed', message);

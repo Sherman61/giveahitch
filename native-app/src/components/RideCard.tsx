@@ -1,5 +1,5 @@
 import { FC, useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { Card } from './Card';
@@ -13,8 +13,10 @@ dayjs.extend(relativeTime);
 interface Props {
   ride: RideSummary;
   currentUserId?: number | null;
+  matchStatus?: string | null;
   onRequireLogin: () => void;
-  onRideAccepted: () => void;
+  onRideAccepted: (rideId: number, status: string) => void;
+  onManageRide?: (ride: RideSummary) => void;
 }
 
 const statusCopy: Record<string, string> = {
@@ -31,12 +33,28 @@ const statusColor: Record<string, string> = {
   closed: palette.muted,
 };
 
+const matchStatusCopy: Record<string, string> = {
+  pending: 'Ride requested',
+  accepted: 'Ride accepted',
+  confirmed: 'Ride confirmed',
+  in_progress: 'Ride in progress',
+  completed: 'Ride completed',
+  cancelled: 'Request cancelled',
+};
+
 const formatDateLabel = (value?: string | null) => {
   if (!value) return null;
   return dayjs(value).format('MMM D, h:mm A');
 };
 
-export const RideCard: FC<Props> = ({ ride, currentUserId, onRequireLogin, onRideAccepted }) => {
+export const RideCard: FC<Props> = ({
+  ride,
+  currentUserId,
+  matchStatus,
+  onRequireLogin,
+  onRideAccepted,
+  onManageRide,
+}) => {
   const seatLabel = ride.packageOnly || ride.seats === 0 ? 'Package only' : `${ride.seats} seat${ride.seats === 1 ? '' : 's'}`;
   const startLabel = formatDateLabel(ride.departureTime);
   const endLabel = formatDateLabel(ride.endTime);
@@ -44,6 +62,10 @@ export const RideCard: FC<Props> = ({ ride, currentUserId, onRequireLogin, onRid
   const statusLabel = statusCopy[ride.status] ?? ride.status;
   const statusTextColor = statusColor[ride.status] ?? palette.text;
   const isOwnRide = currentUserId !== null && ride.ownerId !== null && ride.ownerId === currentUserId;
+  const responseCount = Object.values(ride.matchCounts ?? {}).reduce((sum, count) => sum + count, 0);
+  const canManageRide = isOwnRide && typeof onManageRide === 'function';
+  const manageSubtitle =
+    responseCount > 0 ? (responseCount === 1 ? '1 response waiting' : `${responseCount} responses waiting`) : 'Manage responses and updates';
 
   const contactBlock = useMemo(() => {
     if (ride.contactVisibility?.visible) {
@@ -102,14 +124,31 @@ export const RideCard: FC<Props> = ({ ride, currentUserId, onRequireLogin, onRid
         {contactBlock}
       </View>
 
-      <RideAcceptButton
-        rideId={ride.id}
-        ownerId={ride.ownerId}
-        status={ride.status}
-        currentUserId={currentUserId}
-        onAccepted={onRideAccepted}
-        onRequireLogin={onRequireLogin}
-      />
+      {canManageRide && (
+        <View style={styles.manageBox}>
+          <Text style={styles.manageText}>{manageSubtitle}</Text>
+          <TouchableOpacity style={styles.manageButton} onPress={() => onManageRide?.(ride)}>
+            <Text style={styles.manageButtonLabel}>Manage ride</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {matchStatus ? (
+        <View style={styles.matchStatus}>
+          <Text style={styles.matchStatusText}>
+            {matchStatusCopy[matchStatus] ?? 'Ride offered'}
+          </Text>
+        </View>
+      ) : (
+        <RideAcceptButton
+          rideId={ride.id}
+          ownerId={ride.ownerId}
+          status={ride.status}
+          currentUserId={currentUserId}
+          onAccepted={onRideAccepted}
+          onRequireLogin={onRequireLogin}
+        />
+      )}
     </Card>
   );
 };
@@ -202,6 +241,27 @@ const styles = StyleSheet.create({
   contactBox: {
     marginBottom: spacing.md,
   },
+  manageBox: {
+    padding: spacing.md,
+    borderRadius: 8,
+    backgroundColor: '#f0f5ff',
+    marginBottom: spacing.md,
+  },
+  manageText: {
+    color: palette.primaryDark,
+    marginBottom: spacing.sm,
+    fontWeight: '600',
+  },
+  manageButton: {
+    backgroundColor: palette.primary,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  manageButtonLabel: {
+    color: '#fff',
+    fontWeight: '600',
+  },
   sectionTitle: {
     fontWeight: '600',
     marginBottom: 4,
@@ -212,5 +272,15 @@ const styles = StyleSheet.create({
   contactNotice: {
     color: palette.muted,
     fontStyle: 'italic',
+  },
+  matchStatus: {
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    backgroundColor: '#e6f4ea',
+    alignItems: 'center',
+  },
+  matchStatusText: {
+    color: '#137333',
+    fontWeight: '600',
   },
 });

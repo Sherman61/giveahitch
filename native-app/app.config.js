@@ -15,7 +15,7 @@ module.exports = () => {
       scheme: "glitchahitch",
       version: "0.1.0",
       orientation: "portrait",
-      icon: "./assets/icon.png",
+      icon: "./assets/adaptive-icon.png",
       userInterfaceStyle: "automatic",
       splash: {
         image: "./assets/splash.png",

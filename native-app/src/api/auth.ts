@@ -1,6 +1,6 @@
 import { apiClient, getCsrfToken, setCsrfToken } from './client';
 import { fetchCsrfTokenFromServer } from './session';
-import { fetchProfile } from './profile';
+import { fetchProfileDetails } from './profile';
 import { UserProfile } from '@/types/user';
 
 interface LoginApiResponse {
@@ -27,7 +27,13 @@ export async function login(email: string, password: string): Promise<AuthRespon
     throw new Error(result.error ?? 'Login failed');
   }
 
-  const user = await fetchProfile();
+  const profile = await fetchProfileDetails();
+  const user: UserProfile = {
+    id: profile.id,
+    email: profile.email,
+    name: profile.name,
+    displayName: profile.displayName ?? null,
+  };
   return { csrfToken, user };
 }
 

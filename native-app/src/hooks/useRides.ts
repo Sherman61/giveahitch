@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { RideSummary } from '@/types/rides';
 import { fetchUpcomingRides } from '@/api/rides';
 
-export function useRides(pollEveryMs = 20000) {
+interface UseRidesOptions {
+  pollEveryMs?: number;
+  mine?: boolean;
+  all?: boolean;
+}
+
+export function useRides(options: UseRidesOptions = {}) {
+  const { pollEveryMs = 20000, mine = false, all = false } = options;
   const [rides, setRides] = useState<RideSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -10,7 +17,7 @@ export function useRides(pollEveryMs = 20000) {
   const loadAsync = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchUpcomingRides();
+      const data = await fetchUpcomingRides({ mine, all });
       setRides(data);
       setError(null);
     } catch (err) {
@@ -18,7 +25,7 @@ export function useRides(pollEveryMs = 20000) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mine, all]);
 
   useEffect(() => {
     loadAsync();

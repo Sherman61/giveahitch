@@ -1,0 +1,8 @@
+Primary objective: split ride management into riders’ posted vs responded flows, expose responder management (view profile, message, edit/delete ride), and ensure push notifications cover new messages and ride updates.
+
+Plan:
+1. Audit current Rides/MyRides/PostRide/Alerts stacks plus hooks (rides, matches, notifications) to understand available ride/match data, existing “manage ride” affordances, and gaps for edit/delete + responder detail surfaces.
+2. Extend data layer (API + hooks) to fetch responders per ride and expose mutation endpoints for ride edit/delete and responder messaging; update screens/components so “Manage” on My Rides lists each responder with profile deep-link and message CTA.
+3. Build ride editing UX (screen or modal) reused from Post Ride, gating actions by ownership, and ensure deletions propagate to lists via hooks/refetch.
+4. Implement push notification enrollment: register device/web push tokens on login, persist to `push_subscriptions` table (per provided schema), and fire notifications for message arrivals or ride status changes (server + client subscription refresh).
+5. Validate end-to-end: manual walkthrough of posting ride, receiving responses, managing responders (profile/message/edit/delete), and confirming push notifications fire for messages/updates.

@@ -1,11 +1,22 @@
 import { FC, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import dayjs from 'dayjs';
 import { Card } from '@/components/Card';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { useCreateRide } from '@/hooks/useCreateRide';
 import { UserProfile } from '@/types/user';
+import { DateTimeField } from '@/components/DateTimeField';
 
 interface Props {
   currentUser: UserProfile | null;
@@ -27,15 +38,13 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin }) => {
 
   if (!currentUser) {
     return (
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} style={styles.container}>
         <Card>
           <Text style={styles.title}>Sign in to post a ride</Text>
-          <Text style={styles.subtitle}>
-            You need to be logged in to create ride offers or requests.
-          </Text>
+          <Text style={styles.subtitle}>You need to be logged in to create ride offers or requests.</Text>
           <PrimaryButton label="Log In" onPress={onRequireLogin} />
         </Card>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -81,12 +90,15 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin }) => {
 
     setFormError(null);
 
+    const formatDate = (value: string) =>
+      value ? dayjs(value).format('YYYY-MM-DD HH:mm') : null;
+
     await createRideAsync({
       type: rideType,
       from_text: trimmedFrom,
       to_text: trimmedTo,
-      ride_datetime: startTime || null,
-      ride_end_datetime: endTime || null,
+      ride_datetime: formatDate(startTime),
+      ride_end_datetime: formatDate(endTime),
       seats: Math.max(0, Number(seats) || 0),
       phone: trimmedPhone || undefined,
       whatsapp: trimmedWhatsapp || undefined,
@@ -104,8 +116,13 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <Card>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={80}
+    >
+      <ScrollView contentContainerStyle={styles.content} style={styles.container}>
+        <Card>
         <Text style={styles.title}>Post a Ride</Text>
         <Text style={styles.subtitle}>Share available seats with the GlitchaHitch community.</Text>
 
@@ -148,21 +165,19 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin }) => {
         />
         <View style={styles.row}>
           <View style={styles.column}>
-            <Text style={styles.label}>Start (optional)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="2025-11-11 16:30"
+            <DateTimeField
+              label="Start (optional)"
               value={startTime}
-              onChangeText={setStartTime}
+              placeholder="Pick start time"
+              onChange={(iso) => setStartTime(iso)}
             />
           </View>
           <View style={styles.column}>
-            <Text style={styles.label}>End (optional)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="2025-11-11 18:00"
+            <DateTimeField
+              label="End (optional)"
               value={endTime}
-              onChangeText={setEndTime}
+              placeholder="Pick end time"
+              onChange={(iso) => setEndTime(iso)}
             />
           </View>
         </View>
@@ -196,16 +211,22 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin }) => {
 
         <PrimaryButton label={loading ? 'Posting...' : 'Post Ride'} onPress={handleSubmit} />
       </Card>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: palette.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  content: {
     padding: spacing.lg,
-    justifyContent: 'center',
+    gap: spacing.md,
+    paddingBottom: spacing.xl,
   },
   title: {
     fontSize: 22,
