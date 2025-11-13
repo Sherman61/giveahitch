@@ -7,9 +7,10 @@ interface Props {
   activeTab: string;
   onMenuSelect: (key: string) => void;
   onLogout: () => void;
+  menuItems: { key: string; label: string }[];
 }
 
-export const HeaderBar: FC<Props> = ({ activeTab, onMenuSelect, onLogout }) => {
+export const HeaderBar: FC<Props> = ({ activeTab, onMenuSelect, onLogout, menuItems }) => {
   const [open, setOpen] = useState(false);
 
   const handleSelect = (key: string) => {
@@ -27,17 +28,7 @@ export const HeaderBar: FC<Props> = ({ activeTab, onMenuSelect, onLogout }) => {
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
         <TouchableOpacity style={styles.backdrop} onPress={() => setOpen(false)} />
         <View style={styles.menuSheet}>
-          {[
-            { key: 'rides', label: 'Rides' },
-            { key: 'myRides', label: 'My rides' },
-            { key: 'postRide', label: 'Post ride' },
-            { key: 'alerts', label: 'Alerts' },
-            { key: 'messages', label: 'Messages' },
-            { key: 'rate', label: 'Rate rides' },
-            { key: 'editProfile', label: 'Edit profile' },
-            { key: 'settings', label: 'Settings' },
-            { key: 'login', label: 'Account' },
-          ].map((item) => (
+          {menuItems.map((item) => (
             <TouchableOpacity key={item.key} style={styles.menuRow} onPress={() => handleSelect(item.key)}>
               <Text style={[styles.menuLabel, activeTab === item.key && styles.menuLabelActive]}>
                 {item.label}

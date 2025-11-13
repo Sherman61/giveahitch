@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Dimensions, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ import { MessagesScreen } from './src/screens/MessagesScreen';
 import { RateRidesScreen } from './src/screens/RateRidesScreen';
 import { EditProfileScreen } from './src/screens/EditProfileScreen';
 import { NotificationsProvider, useNotifications } from './src/hooks/useNotifications';
+import { PushNotificationTestScreen } from './src/screens/admin/PushNotificationTestScreen';
 
 type TabKey =
   | 'rides'
@@ -26,9 +27,10 @@ type TabKey =
   | 'rate'
   | 'settings'
   | 'login'
-  | 'editProfile';
+  | 'editProfile'
+  | 'adminPush';
 
-const tabOrder: TabKey[] = [
+const baseTabOrder: TabKey[] = [
   'rides',
   'myRides',
   'postRide',
@@ -39,6 +41,7 @@ const tabOrder: TabKey[] = [
   'login',
   'editProfile',
 ];
+const adminTabs: TabKey[] = ['adminPush'];
 const tabBarTabs: TabKey[] = ['rides', 'myRides', 'postRide', 'alerts', 'settings', 'login'];
 const windowWidth = Dimensions.get('window').width;
 
@@ -64,6 +67,11 @@ function AppContent() {
   const scrollRef = useRef<Animated.ScrollView>(null);
   const { expoPushToken, registerAsync } = useNotifications();
   const [autoRegistrationAttempted, setAutoRegistrationAttempted] = useState(false);
+  const isAuthenticated = Boolean(auth?.user);
+  const orderedTabs = useMemo(
+    () => (isAuthenticated ? [...baseTabOrder, ...adminTabs] : baseTabOrder),
+    [isAuthenticated],
+  );
 
   const handleLoginSuccess = (data: AuthResponse) => {
     setAuth(data);
@@ -76,16 +84,19 @@ function AppContent() {
     scrollToTab('login');
   };
 
-  const scrollToTab = useCallback((key: TabKey) => {
-    const nextIndex = tabOrder.indexOf(key);
-    if (nextIndex < 0) return;
-    setActiveTab(key);
-    scrollRef.current?.scrollTo({ x: nextIndex * windowWidth, animated: true });
-  }, []);
+  const scrollToTab = useCallback(
+    (key: TabKey) => {
+      const nextIndex = orderedTabs.indexOf(key);
+      if (nextIndex < 0) return;
+      setActiveTab(key);
+      scrollRef.current?.scrollTo({ x: nextIndex * windowWidth, animated: true });
+    },
+    [orderedTabs],
+  );
 
   const onMomentumEnd = (event: any) => {
     const index = Math.round(event.nativeEvent.contentOffset.x / windowWidth);
-    const key = tabOrder[index] ?? 'rides';
+    const key = orderedTabs[index] ?? 'rides';
     if (key !== activeTab) {
       setActiveTab(key);
     }
@@ -94,6 +105,30 @@ function AppContent() {
   const resolvedTabs = tabs.map((tab) =>
     tab.key === 'login' ? { ...tab, label: auth ? 'Profile' : 'Login' } : tab,
   );
+  const headerMenuItems = useMemo(() => {
+    const items: { key: TabKey; label: string }[] = [
+      { key: 'rides', label: 'Rides' },
+      { key: 'myRides', label: 'My rides' },
+      { key: 'postRide', label: 'Post ride' },
+      { key: 'alerts', label: 'Alerts' },
+      { key: 'messages', label: 'Messages' },
+      { key: 'rate', label: 'Rate rides' },
+      { key: 'editProfile', label: 'Edit profile' },
+      { key: 'settings', label: 'Settings' },
+      { key: 'login', label: auth ? 'Account' : 'Login' },
+    ];
+    if (isAuthenticated) {
+      items.push({ key: 'adminPush', label: 'Admin: Push test' });
+    }
+    return items;
+  }, [auth, isAuthenticated]);
+
+  useEffect(() => {
+    if (!orderedTabs.includes(activeTab)) {
+      setActiveTab('rides');
+      scrollRef.current?.scrollTo({ x: 0, animated: false });
+    }
+  }, [orderedTabs, activeTab]);
 
   useEffect(() => {
     if (!auth?.user) {
@@ -150,6 +185,13 @@ function AppContent() {
         return <SettingsScreen />;
       case 'editProfile':
         return <EditProfileScreen />;
+      case 'adminPush':
+        return (
+          <PushNotificationTestScreen
+            isAuthenticated={isAuthenticated}
+            onRequireLogin={() => scrollToTab('login')}
+          />
+        );
       case 'login':
       default:
         return auth?.user ? (
@@ -168,6 +210,7 @@ function AppContent() {
           activeTab={activeTab}
           onMenuSelect={(key) => scrollToTab(key as TabKey)}
           onLogout={handleLogout}
+          menuItems={headerMenuItems}
         />
         <Animated.ScrollView
           ref={scrollRef}
@@ -177,7 +220,7 @@ function AppContent() {
           onMomentumScrollEnd={onMomentumEnd}
           scrollEventThrottle={16}
         >
-          {tabOrder.map((key) => (
+          {orderedTabs.map((key) => (
             <View key={key} style={{ width: windowWidth }}>
               {renderScene(key)}
             </View>

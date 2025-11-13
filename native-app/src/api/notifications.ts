@@ -14,7 +14,7 @@ export interface NotificationPreview {
 }
 
 export function registerPushToken(payload: PushTokenPayload) {
-  return apiClient.post<{ ok: boolean }>('/notifications/register-token.php', payload);
+  return apiClient.post<{ ok: boolean }>('/mobile/register-token.php', payload);
 }
 
 export function fetchNotificationPreviews() {
@@ -32,7 +32,7 @@ export async function savePushSubscription(payload: {
     return;
   }
   const tokenSlice = payload.endpoint.slice(0, 32) || payload.endpoint;
-  await apiClient.post('/push_subscriptions.php', {
+  await apiClient.post('/mobile/push_subscriptions.php', {
     csrf,
     endpoint: payload.endpoint,
     keys: {
@@ -40,5 +40,16 @@ export async function savePushSubscription(payload: {
       auth: tokenSlice,
     },
     ua: payload.userAgent ?? `expo-native/${payload.platform ?? 'unknown'}`,
+  });
+}
+
+export async function sendPushTestNotification(message?: string) {
+  const csrf = getCsrfToken();
+  if (!csrf) {
+    throw new Error('You must be logged in to trigger push tests.');
+  }
+  return apiClient.post<{ ok: boolean; message?: string }>('/mobile/push-test.php', {
+    csrf,
+    ...(message ? { message } : {}),
   });
 }
