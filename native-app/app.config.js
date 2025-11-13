@@ -7,9 +7,8 @@ const uuidPattern =
 function resolveProjectId() {
   const candidate =
     process.env.EXPO_PUBLIC_PROJECT_ID ||
-    process.env.EXPO_PROJECT_ID ||
-    process.env.EAS_PROJECT_ID ||
-    null;
+    "ed67a7c8-85af-457c-a459-f40ddcdd31b7";
+  null;
 
   if (!candidate) {
     return null;
@@ -32,6 +31,7 @@ module.exports = () => {
   const googleServicesPath = path.resolve(projectRoot, googleServicesFile);
   const hasGoogleServicesFile = fs.existsSync(googleServicesPath);
   const expoProjectId = resolveProjectId();
+  const expoOwner = process.env.EXPO_OWNER || "shiyas-expo-apps";
 
   const extra = {
     apiUrl: "https://glitchahitch.com/api",
@@ -45,6 +45,7 @@ module.exports = () => {
 
   return {
     expo: {
+      owner: expoOwner,
       name: "Glitch A Hitch",
       slug: "glitchahitch",
       scheme: "glitchahitch",
@@ -72,7 +73,12 @@ module.exports = () => {
         ...(hasGoogleServicesFile ? { googleServicesFile } : {}),
       },
       plugins: ["expo-notifications", "expo-dev-client"],
-      extra,
+      extra: {
+        eas: {
+          projectId: "ed67a7c8-85af-457c-a459-f40ddcdd31b7",
+          owner: "shiyas-expo-apps",
+        },
+      },
     },
   };
 };
