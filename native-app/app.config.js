@@ -1,12 +1,47 @@
 const fs = require("fs");
 const path = require("path");
 
+const uuidPattern =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+function resolveProjectId() {
+  const candidate =
+    process.env.EXPO_PUBLIC_PROJECT_ID ||
+    process.env.EXPO_PROJECT_ID ||
+    process.env.EAS_PROJECT_ID ||
+    null;
+
+  if (!candidate) {
+    return null;
+  }
+
+  if (!uuidPattern.test(candidate)) {
+    console.warn(
+      `[expo-config] Ignoring invalid Expo project ID "${candidate}". Expected a UUID.`
+    );
+    return null;
+  }
+
+  return candidate;
+}
+
 module.exports = () => {
   const projectRoot = __dirname;
   const googleServicesFile =
     process.env.EXPO_GOOGLE_SERVICES_FILE || "./google-services.json";
   const googleServicesPath = path.resolve(projectRoot, googleServicesFile);
   const hasGoogleServicesFile = fs.existsSync(googleServicesPath);
+  const expoProjectId = resolveProjectId();
+
+  const extra = {
+    apiUrl: "https://glitchahitch.com/api",
+    googleServicesFileConfigured: hasGoogleServicesFile,
+  };
+
+  if (expoProjectId) {
+    extra.eas = { projectId: expoProjectId };
+    extra.expoProjectId = expoProjectId;
+  }
 
   return {
     expo: {
@@ -37,13 +72,7 @@ module.exports = () => {
         ...(hasGoogleServicesFile ? { googleServicesFile } : {}),
       },
       plugins: ["expo-notifications", "expo-dev-client"],
-      extra: {
-        eas: {
-          projectId: "00000000-0000-0000-0000-000000000000",
-        },
-        apiUrl: "https://glitchahitch.com/api",
-        googleServicesFileConfigured: hasGoogleServicesFile,
-      },
+      extra,
     },
   };
 };

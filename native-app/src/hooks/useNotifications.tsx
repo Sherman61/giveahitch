@@ -7,6 +7,7 @@ import {
   ReactNode,
 } from "react";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import * as Application from "expo-application";
@@ -31,6 +32,30 @@ interface NotificationsContextValue {
 const NotificationsContext = createContext<NotificationsContextValue | null>(
   null
 );
+
+const uuidPattern =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+function resolveExpoProjectId(): string | null {
+  const extra =
+    (Constants.expoConfig?.extra as {
+      expoProjectId?: string;
+      eas?: { projectId?: string };
+    }) ?? {};
+
+  const candidate =
+    Constants.easConfig?.projectId ||
+    extra.expoProjectId ||
+    extra.eas?.projectId ||
+    process.env.EXPO_PUBLIC_PROJECT_ID ||
+    null;
+
+  if (candidate && uuidPattern.test(candidate)) {
+    return candidate;
+  }
+
+  return null;
+}
 
 function useNotificationsInternal(): NotificationsContextValue {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
@@ -69,7 +94,15 @@ function useNotificationsInternal(): NotificationsContextValue {
       return null;
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync();
+    const projectId = resolveExpoProjectId();
+    if (!projectId) {
+      console.warn(
+        "Expo project ID missing. Set EXPO_PUBLIC_PROJECT_ID to enable push notifications."
+      );
+      return null;
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenData.data;
     setExpoPushToken(token);
 
