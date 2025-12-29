@@ -17,13 +17,16 @@ import { spacing } from '@/constants/layout';
 import { useCreateRide } from '@/hooks/useCreateRide';
 import { UserProfile } from '@/types/user';
 import { DateTimeField } from '@/components/DateTimeField';
+import { useAlerts } from '@/hooks/useAlerts';
+import { AlertsBadgeButton } from '@/components/AlertsBadgeButton';
 
 interface Props {
   currentUser: UserProfile | null;
   onRequireLogin: () => void;
+  onNavigate: (key: string) => void;
 }
 
-export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin }) => {
+export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavigate }) => {
   const [rideType, setRideType] = useState<'offer' | 'request'>('offer');
   const [fromText, setFromText] = useState('');
   const [toText, setToText] = useState('');
@@ -35,6 +38,7 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin }) => {
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const { createRideAsync, loading, error, successMessage } = useCreateRide();
+  const { unreadCount } = useAlerts(Boolean(currentUser?.id));
 
   if (!currentUser) {
     return (
@@ -123,94 +127,97 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin }) => {
     >
       <ScrollView contentContainerStyle={styles.content} style={styles.container}>
         <Card>
-        <Text style={styles.title}>Post a Ride</Text>
-        <Text style={styles.subtitle}>Share available seats with the GlitchaHitch community.</Text>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.title}>Post a Ride</Text>
+              <Text style={styles.subtitle}>Share available seats with the GlitchaHitch community.</Text>
+            </View>
+            <AlertsBadgeButton count={unreadCount} onPress={() => onNavigate('alerts')} />
+          </View>
 
-        <Text style={styles.label}>Type</Text>
-        <View style={styles.typeRow}>
-          {(['offer', 'request'] as const).map((value) => (
-            <TouchableOpacity
-              key={value}
-              style={[styles.typeOption, rideType === value && styles.typeOptionActive]}
-              onPress={() => setRideType(value)}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[styles.typeLabel, rideType === value && styles.typeLabelActive]}
+          <Text style={styles.label}>Type</Text>
+          <View style={styles.typeRow}>
+            {(['offer', 'request'] as const).map((value) => (
+              <TouchableOpacity
+                key={value}
+                style={[styles.typeOption, rideType === value && styles.typeOptionActive]}
+                onPress={() => setRideType(value)}
+                activeOpacity={0.8}
               >
-                {value === 'offer' ? 'Offer a Ride' : 'Request a Ride'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <TextInput
-          style={styles.input}
-          placeholder="Seats (0 = package)"
-          keyboardType="numeric"
-          value={seats}
-          onChangeText={setSeats}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="From (e.g. Borough Park, Brooklyn)"
-          value={fromText}
-          onChangeText={setFromText}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="To (e.g. Monsey, NY)"
-          value={toText}
-          onChangeText={setToText}
-        />
-        <View style={styles.row}>
-          <View style={styles.column}>
-            <DateTimeField
-              label="Start (optional)"
-              value={startTime}
-              placeholder="Pick start time"
-              onChange={(iso) => setStartTime(iso)}
-            />
+                <Text style={[styles.typeLabel, rideType === value && styles.typeLabelActive]}>
+                  {value === 'offer' ? 'Offer a Ride' : 'Request a Ride'}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-          <View style={styles.column}>
-            <DateTimeField
-              label="End (optional)"
-              value={endTime}
-              placeholder="Pick end time"
-              onChange={(iso) => setEndTime(iso)}
-            />
+          <TextInput
+            style={styles.input}
+            placeholder="Seats (0 = package)"
+            keyboardType="numeric"
+            value={seats}
+            onChangeText={setSeats}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="From (e.g. Borough Park, Brooklyn)"
+            value={fromText}
+            onChangeText={setFromText}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="To (e.g. Monsey, NY)"
+            value={toText}
+            onChangeText={setToText}
+          />
+          <View style={styles.row}>
+            <View style={styles.column}>
+              <DateTimeField
+                label="Start (optional)"
+                value={startTime}
+                placeholder="Pick start time"
+                onChange={(iso) => setStartTime(iso)}
+              />
+            </View>
+            <View style={styles.column}>
+              <DateTimeField
+                label="End (optional)"
+                value={endTime}
+                placeholder="Pick end time"
+                onChange={(iso) => setEndTime(iso)}
+              />
+            </View>
           </View>
-        </View>
-        <TextInput
-          style={styles.input}
-          placeholder="Phone (+1 718 555 1234)"
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="WhatsApp (+1 347 555 7890)"
-          value={whatsapp}
-          onChangeText={setWhatsapp}
-          keyboardType="phone-pad"
-        />
-        <Text style={styles.helper}>Provide at least one contact method.</Text>
-        <TextInput
-          style={[styles.input, styles.multiline]}
-          placeholder="Notes (optional)"
-          value={notes}
-          onChangeText={setNotes}
-          multiline
-          numberOfLines={3}
-        />
+          <TextInput
+            style={styles.input}
+            placeholder="Phone (+1 718 555 1234)"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="WhatsApp (+1 347 555 7890)"
+            value={whatsapp}
+            onChangeText={setWhatsapp}
+            keyboardType="phone-pad"
+          />
+          <Text style={styles.helper}>Provide at least one contact method.</Text>
+          <TextInput
+            style={[styles.input, styles.multiline]}
+            placeholder="Notes (optional)"
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            numberOfLines={3}
+          />
 
-        {formError && <Text style={styles.error}>{formError}</Text>}
-        {error && <Text style={styles.error}>{error}</Text>}
-        {successMessage && <Text style={styles.success}>{successMessage}</Text>}
+          {formError && <Text style={styles.error}>{formError}</Text>}
+          {error && <Text style={styles.error}>{error}</Text>}
+          {successMessage && <Text style={styles.success}>{successMessage}</Text>}
 
-        <PrimaryButton label={loading ? 'Posting...' : 'Post Ride'} onPress={handleSubmit} />
-      </Card>
+          <PrimaryButton label={loading ? 'Posting...' : 'Post Ride'} onPress={handleSubmit} />
+        </Card>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -300,5 +307,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: palette.muted,
     marginBottom: spacing.sm,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
   },
 });

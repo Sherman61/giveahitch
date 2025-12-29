@@ -22,8 +22,8 @@ type TabKey =
   | 'rides'
   | 'myRides'
   | 'postRide'
-  | 'alerts'
   | 'messages'
+  | 'alerts'
   | 'rate'
   | 'settings'
   | 'login'
@@ -34,15 +34,15 @@ const baseTabOrder: TabKey[] = [
   'rides',
   'myRides',
   'postRide',
-  'alerts',
   'messages',
+  'alerts',
   'rate',
   'settings',
   'login',
   'editProfile',
 ];
 const adminTabs: TabKey[] = ['adminPush'];
-const tabBarTabs: TabKey[] = ['rides', 'myRides', 'postRide', 'alerts', 'settings', 'login'];
+const tabBarTabs: TabKey[] = ['rides', 'myRides', 'postRide', 'messages'];
 const windowWidth = Dimensions.get('window').width;
 
 const tabs: TabItem[] = tabBarTabs.map((key) => ({
@@ -54,11 +54,9 @@ const tabs: TabItem[] = tabBarTabs.map((key) => ({
         ? 'My Rides'
         : key === 'postRide'
           ? 'Post Ride'
-          : key === 'alerts'
-            ? 'Alerts'
-            : key === 'settings'
-              ? 'Settings'
-              : 'Account',
+          : key === 'messages'
+            ? 'Messages'
+            : 'Account',
 }));
 
 function AppContent() {
@@ -110,8 +108,8 @@ function AppContent() {
       { key: 'rides', label: 'Rides' },
       { key: 'myRides', label: 'My rides' },
       { key: 'postRide', label: 'Post ride' },
-      { key: 'alerts', label: 'Alerts' },
       { key: 'messages', label: 'Messages' },
+      { key: 'alerts', label: 'Alerts' },
       { key: 'rate', label: 'Rate rides' },
       { key: 'editProfile', label: 'Edit profile' },
       { key: 'settings', label: 'Settings' },
@@ -174,7 +172,13 @@ function AppContent() {
           />
         );
       case 'postRide':
-        return <PostRideScreen currentUser={auth?.user ?? null} onRequireLogin={() => scrollToTab('login')} />;
+        return (
+          <PostRideScreen
+            currentUser={auth?.user ?? null}
+            onNavigate={(navKey) => scrollToTab(navKey as TabKey)}
+            onRequireLogin={() => scrollToTab('login')}
+          />
+        );
       case 'alerts':
         return <AlertsScreen />;
       case 'messages':

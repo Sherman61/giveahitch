@@ -13,6 +13,8 @@ import { MyRespondedRidesSection } from '@/components/MyRespondedRidesSection';
 import { RideManageModal } from '@/components/RideManageModal';
 import { RideEditModal } from '@/components/RideEditModal';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useAlerts } from '@/hooks/useAlerts';
+import { AlertsBadgeButton } from '@/components/AlertsBadgeButton';
 
 interface Props {
   user?: UserProfile | null;
@@ -27,6 +29,7 @@ export const MyRidesScreen: FC<Props> = ({ user, onNavigate, onRequestLogin }) =
   const [editingRide, setEditingRide] = useState<RideSummary | null>(null);
   const [manageRefreshTick, setManageRefreshTick] = useState(0);
   const { lastNotification } = useNotifications();
+  const { unreadCount } = useAlerts(Boolean(user?.id));
 
   const handleManageRide = useCallback(
     (ride: RideSummary) => {
@@ -74,19 +77,19 @@ export const MyRidesScreen: FC<Props> = ({ user, onNavigate, onRequestLogin }) =
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}
       >
-      <Text style={styles.title}>My rides</Text>
-      <Text style={styles.subtitle}>Manage your ride offers and requests.</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.title}>My rides</Text>
+            <Text style={styles.subtitle}>Manage your ride offers and requests.</Text>
+          </View>
+          <AlertsBadgeButton count={unreadCount} onPress={() => onNavigate('alerts')} />
+        </View>
 
       <QuickNavStrip
         items={[
           { key: 'rides', title: 'Explore', subtitle: 'Browse new rides' },
           { key: 'postRide', title: 'Post Ride', subtitle: 'Share availability' },
-          { key: 'alerts', title: 'Alerts', subtitle: 'Ride updates' },
           { key: 'messages', title: 'Messages', subtitle: 'Conversations' },
-          { key: 'rate', title: 'Rate rides', subtitle: 'Share feedback' },
-          { key: 'settings', title: 'Settings', subtitle: 'Alerts & links' },
-          { key: 'login', title: 'Account', subtitle: 'Profile & logout' },
-          { key: 'editProfile', title: 'Edit profile', subtitle: 'Update contact' },
         ]}
         onSelect={onNavigate}
         refreshSignal={manageRefreshTick}
@@ -161,5 +164,11 @@ const styles = StyleSheet.create({
   },
   error: {
     color: palette.danger,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
   },
 });
