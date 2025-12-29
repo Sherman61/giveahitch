@@ -12,11 +12,13 @@ export interface QuickNavItem {
 interface Props {
   items: QuickNavItem[];
   onSelect: (key: string) => void;
+  refreshSignal?: number;
 }
 
-export const QuickNavStrip: FC<Props> = ({ items, onSelect }) => {
+export const QuickNavStrip: FC<Props> = ({ items, onSelect, refreshSignal }) => {
   return (
     <ScrollView
+      key={refreshSignal ?? 'quick-nav'}
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.container}

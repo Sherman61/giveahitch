@@ -6,6 +6,8 @@ import { QuickNavStrip } from '@/components/QuickNavStrip';
 import { useRides } from '@/hooks/useRides';
 import { useMyMatches } from '@/hooks/useMyMatches';
 import { UserProfile } from '@/types/user';
+import { AlertsBadgeButton } from '@/components/AlertsBadgeButton';
+import { useAlerts } from '@/hooks/useAlerts';
 import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 
@@ -18,6 +20,7 @@ interface Props {
 export const RidesScreen: FC<Props> = ({ user, onRequestLogin, onNavigate }) => {
   const { rides, loading, error, refresh } = useRides();
   const { matchesByRideId, refreshMatches, markRideAccepted } = useMyMatches(user ?? null);
+  const { unreadCount } = useAlerts(Boolean(user?.id));
 
   const handleRideAccepted = (rideId: number, status: string) => {
     markRideAccepted(rideId, status);
@@ -31,10 +34,15 @@ export const RidesScreen: FC<Props> = ({ user, onRequestLogin, onNavigate }) => 
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}
     >
-      <Text style={styles.title}>Rides</Text>
-      <Text style={styles.subtitle}>
-        {user ? `Welcome back, ${user.name}.` : 'Sign in to sync rides across devices.'}
-      </Text>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.title}>Rides</Text>
+          <Text style={styles.subtitle}>
+            {user ? `Welcome back, ${user.name}.` : 'Sign in to sync rides across devices.'}
+          </Text>
+        </View>
+        <AlertsBadgeButton count={unreadCount} onPress={() => onNavigate('alerts')} />
+      </View>
 
       {!user && (
         <View style={styles.banner}>
@@ -47,12 +55,7 @@ export const RidesScreen: FC<Props> = ({ user, onRequestLogin, onNavigate }) => 
         items={[
           { key: 'myRides', title: 'My Rides', subtitle: 'View your posts' },
           { key: 'postRide', title: 'Post Ride', subtitle: 'Share availability' },
-          { key: 'alerts', title: 'Alerts', subtitle: 'Ride updates' },
           { key: 'messages', title: 'Messages', subtitle: 'Chat with riders' },
-          { key: 'rate', title: 'Rate rides', subtitle: 'Leave feedback' },
-          { key: 'settings', title: 'Settings', subtitle: 'Preferences' },
-          { key: 'login', title: 'Account', subtitle: 'Profile & logout' },
-          { key: 'editProfile', title: 'Edit profile', subtitle: 'Update contact' },
         ]}
         onSelect={onNavigate}
       />
@@ -89,6 +92,12 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: palette.muted,
+    marginBottom: spacing.lg,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: spacing.lg,
   },
   banner: {
