@@ -12,6 +12,143 @@ require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 
 use function App\Auth\{assert_csrf_and_get_input, require_admin};
+/** 
+ * @param array<int,array<string,mixed>> $messages
+ * @return array{sent:int,failed:int,invalid:array<string,bool>,reports:array<int,array<string,mixed>>}
+ */
+function dispatch_expo_push(array $messages): array
+{
+    $result = [
+        'sent' => 0,
+        'failed' => 0,
+        'invalid' => [],
+        'reports' => [],
+    ];
+
+    if (!$messages) {
+        return $result;
+    }
+
+    if (!function_exists('curl_init')) {
+        $result['failed'] = count($messages);
+        $result['reports'][] = [
+            'endpoint' => 'expo',
+            'reason' => 'curl_missing',
+            'status' => null,
+        ];
+        return $result;
+    }
+
+    $url = 'https://exp.host/--/api/v2/push/send';
+
+    foreach (array_chunk($messages, 50) as $batch) {
+        $payload = json_encode($batch, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($payload === false) {
+            $result['failed'] += count($batch);
+            $result['reports'][] = [
+                'endpoint' => 'expo',
+                'reason' => 'payload_encode_failed',
+                'status' => null,
+            ];
+            continue;
+        }
+
+        $ch = curl_init($url);
+        if ($ch === false) {
+            $result['failed'] += count($batch);
+            $result['reports'][] = [
+                'endpoint' => 'expo',
+                'reason' => 'curl_init_failed',
+                'status' => null,
+            ];
+            continue;
+        }
+
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ]);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+        $response = curl_exec($ch);
+        $curlErrNo = curl_errno($ch);
+        $curlErr = curl_error($ch);
+        $statusCode = (int)(curl_getinfo($ch, CURLINFO_RESPONSE_CODE) ?: (curl_getinfo($ch, CURLINFO_HTTP_CODE) ?: 0));
+
+        curl_close($ch);
+
+        if ($response === false || $curlErrNo !== 0) {
+            error_log('admin_push:expo_curl_error ' . $curlErr);
+            $result['failed'] += count($batch);
+            $result['reports'][] = [
+                'endpoint' => 'expo',
+                'reason' => $curlErr ?: 'curl_error',
+                'status' => $statusCode ?: null,
+            ];
+            continue;
+        }
+
+        $decoded = json_decode($response, true);
+        $data = is_array($decoded) && isset($decoded['data']) && is_array($decoded['data'])
+            ? $decoded['data']
+            : null;
+
+        if ($data === null) {
+            $result['failed'] += count($batch);
+            $result['reports'][] = [
+                'endpoint' => 'expo',
+                'reason' => 'invalid_response',
+                'status' => $statusCode ?: null,
+            ];
+            continue;
+        }
+
+        foreach ($batch as $idx => $message) {
+            $token = (string)($message['to'] ?? '');
+            $entry = $data[$idx] ?? null;
+
+            if (is_array($entry) && ($entry['status'] ?? '') === 'ok') {
+                $result['sent']++;
+                continue;
+            }
+
+            $result['failed']++;
+
+            $reason = 'expo_error';
+            $status = null;
+            $detailsError = null;
+            if (is_array($entry)) {
+                $status = $entry['status'] ?? null;
+                if (!empty($entry['details']) && is_array($entry['details'])) {
+                    $detailsError = (string)($entry['details']['error'] ?? '');
+                }
+                if (!empty($entry['message'])) {
+                    $reason = (string)$entry['message'];
+                }
+                if ($detailsError) {
+                    $reason = $detailsError;
+                }
+            }
+
+            $result['reports'][] = [
+                'endpoint' => $token ?: 'expo',
+                'reason' => $reason,
+                'status' => $status,
+            ];
+
+            if ($detailsError === 'DeviceNotRegistered' || $detailsError === 'ExpoPushTokenNotRegistered') {
+                if ($token !== '') {
+                    $result['invalid'][$token] = true;
+                }
+            }
+        }
+    }
+
+    return $result;
+}
 
 try {
     require_admin();
@@ -76,13 +213,37 @@ try {
     $failed = 0;
     $invalidEndpoints = [];
     $reports = [];
+    $expoMessages = [];
 
     foreach ($subscriptions as $row) {
         $endpoint = (string)($row['endpoint'] ?? '');
         $p256dh = (string)($row['p256dh'] ?? '');
         $auth = (string)($row['auth'] ?? '');
 
-        if ($endpoint === '' || $p256dh === '' || $auth === '') {
+        if ($endpoint === '') {
+            $failed++;
+            continue;
+        }
+
+        if (str_starts_with($endpoint, 'ExponentPushToken')) {
+            $expoMessage = [
+                'to' => $endpoint,
+                'title' => $title,
+                'sound' => 'default',
+                'priority' => 'high',
+                'data' => [
+                    'url' => '/notifications.php',
+                    'source' => 'admin_push',
+                ],
+            ];
+            if ($body !== '') {
+                $expoMessage['body'] = $body;
+            }
+            $expoMessages[] = $expoMessage;
+            continue;
+        }
+
+        if ($p256dh === '' || $auth === '') {
             $failed++;
             continue;
         }
@@ -127,6 +288,21 @@ try {
                 'status' => $status,
             ];
         }
+    }
+
+    $expoResult = dispatch_expo_push($expoMessages);
+    $sent += $expoResult['sent'];
+    $failed += $expoResult['failed'];
+
+    foreach ($expoResult['invalid'] as $token => $_) {
+        $invalidEndpoints[$token] = true;
+    }
+
+    foreach ($expoResult['reports'] as $reportEntry) {
+        if (count($reports) >= 5) {
+            break;
+        }
+        $reports[] = $reportEntry;
     }
 
     if ($invalidEndpoints) {
