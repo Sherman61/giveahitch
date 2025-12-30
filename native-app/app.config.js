@@ -8,7 +8,6 @@ function resolveProjectId() {
   const candidate =
     process.env.EXPO_PUBLIC_PROJECT_ID ||
     "ed67a7c8-85af-457c-a459-f40ddcdd31b7";
-  null;
 
   if (!candidate) {
     return null;

@@ -12,9 +12,10 @@ export function useMyMatches(user: UserProfile | null) {
   const loadAsync = useCallback(async () => {
     if (!userId) {
       setMatchesByRideId({});
+      setMatchesList([]);
       return;
     }
-    const matches = await fetchMyMatches();
+    const matches = await fetchMyMatches(userId);
     setMatchesList(matches);
     const next: MatchesByRideId = {};
     matches.forEach((match) => {
