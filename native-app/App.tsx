@@ -14,7 +14,7 @@ import { AuthResponse, logout } from './src/api/auth';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { MessagesScreen } from './src/screens/MessagesScreen';
 import { RateRidesScreen } from './src/screens/RateRidesScreen';
-import { EditProfileScreen } from './src/screens/EditProfileScreen';
+// import { EditProfileScreen } from './src/screens/EditProfileScreen';
 import { NotificationsProvider, useNotifications } from './src/hooks/useNotifications';
 import { PushNotificationTestScreen } from './src/screens/admin/PushNotificationTestScreen';
 
@@ -27,7 +27,6 @@ type TabKey =
   | 'rate'
   | 'settings'
   | 'login'
-  | 'editProfile'
   | 'adminPush';
 
 const baseTabOrder: TabKey[] = [
@@ -39,7 +38,7 @@ const baseTabOrder: TabKey[] = [
   'rate',
   'settings',
   'login',
-  'editProfile',
+ 
 ];
 const adminTabs: TabKey[] = ['adminPush'];
 const tabBarTabs: TabKey[] = ['rides', 'myRides', 'postRide', 'messages'];
@@ -111,7 +110,7 @@ function AppContent() {
       { key: 'messages', label: 'Messages' },
       { key: 'alerts', label: 'Alerts' },
       { key: 'rate', label: 'Rate rides' },
-      { key: 'editProfile', label: 'Edit profile' },
+     
       { key: 'settings', label: 'Settings' },
       { key: 'login', label: auth ? 'Account' : 'Login' },
     ];
@@ -187,8 +186,7 @@ function AppContent() {
         return <RateRidesScreen user={auth?.user ?? null} onRequestLogin={() => scrollToTab('login')} />;
       case 'settings':
         return <SettingsScreen />;
-      case 'editProfile':
-        return <EditProfileScreen />;
+      
       case 'adminPush':
         return (
           <PushNotificationTestScreen
@@ -247,6 +245,6 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f1f1f1',
   },
 });

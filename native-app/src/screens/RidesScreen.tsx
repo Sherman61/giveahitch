@@ -54,8 +54,8 @@ export const RidesScreen: FC<Props> = ({ user, onRequestLogin, onNavigate }) => 
       <QuickNavStrip
         items={[
           { key: 'myRides', title: 'My Rides', subtitle: 'View your posts' },
-          { key: 'postRide', title: 'Post Ride', subtitle: 'Share availability' },
-          { key: 'messages', title: 'Messages', subtitle: 'Chat with riders' },
+          { key: 'postRide', title: 'Post Ride', subtitle: 'request or offer' },
+          
         ]}
         onSelect={onNavigate}
       />

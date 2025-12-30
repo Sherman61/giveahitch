@@ -13,3 +13,5 @@ package-lock.json
 *.p8
 *.p12
 .DS_Store
+android/
+native-app/android/

@@ -4,7 +4,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { useNotifications } from '@/hooks/useNotifications';
 import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
-
+import { EditProfileScreen } from './EditProfileScreen';
 export const SettingsScreen: FC = () => {
   const { expoPushToken, registerAsync, scheduleLocalTest } = useNotifications();
 
@@ -32,6 +32,7 @@ export const SettingsScreen: FC = () => {
           </View>
         )}
       </View>
+<EditProfileScreen />
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Quick links</Text>
@@ -49,7 +50,7 @@ export const SettingsScreen: FC = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Support</Text>
         <Text style={styles.bodyText}>
-          Need help? Email <Text style={styles.linkText}>support@glitchahitch.com</Text> or open the
+          Need help? whatsapp <Text style={styles.linkText}>8452441202</Text> or open the
           Help Center from the web dashboard.
         </Text>
       </View>
