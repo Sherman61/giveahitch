@@ -3,6 +3,7 @@ export type RideStatus = 'open' | 'cancelled' | 'completed' | 'closed' | string;
 export interface ContactVisibility {
   visible?: boolean;
   reason?: string;
+  level?: number;
 }
 
 export interface RideSummary {
@@ -29,4 +30,3 @@ export interface RideSummary {
     status: string;
   };
 }
-

@@ -67,6 +67,13 @@ export const RideCard: FC<Props> = ({
   const manageSubtitle =
     responseCount > 0 ? (responseCount === 1 ? '1 response waiting' : `${responseCount} responses waiting`) : 'Manage responses and updates';
 
+  const contactPrivacyLabel = useMemo(() => {
+    const level = ride.contactVisibility?.level;
+    if (level === 2) return 'Visible to logged-in members';
+    if (level === 3) return 'Public while they have an active ride';
+    return 'Share after a ride is accepted (default)';
+  }, [ride.contactVisibility?.level]);
+
   const contactBlock = useMemo(() => {
     if (ride.contactVisibility?.visible) {
       const rows: string[] = [];
@@ -85,9 +92,14 @@ export const RideCard: FC<Props> = ({
         </Text>
       ));
     }
-    const message = ride.contactNotice ?? 'Contact becomes visible once a ride is accepted.';
-    return <Text style={styles.contactNotice}>{message}</Text>;
-  }, [ride.contactNotice, ride.contactVisibility?.visible, ride.phone, ride.whatsapp]);
+    const message = ride.contactNotice ?? contactPrivacyLabel;
+    return (
+      <View style={styles.contactNoticeBlock}>
+        <Text style={styles.contactNotice}>{message}</Text>
+        <Text style={styles.contactPrivacyHint}>{contactPrivacyLabel}</Text>
+      </View>
+    );
+  }, [contactPrivacyLabel, ride.contactNotice, ride.contactVisibility?.visible, ride.phone, ride.whatsapp]);
 
   return (
     <Card>
@@ -269,9 +281,16 @@ const styles = StyleSheet.create({
   contactLine: {
     color: palette.text,
   },
+  contactNoticeBlock: {
+    gap: spacing.xs,
+  },
   contactNotice: {
     color: palette.muted,
     fontStyle: 'italic',
+  },
+  contactPrivacyHint: {
+    color: palette.muted,
+    fontSize: 12,
   },
   matchStatus: {
     paddingVertical: spacing.sm,
