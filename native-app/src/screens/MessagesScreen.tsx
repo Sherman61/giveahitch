@@ -11,6 +11,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { useNotifications } from '@/hooks/useNotifications';
 import { fetchConversation, fetchThreads, Message, MessageThread, sendMessage } from '@/api/messages';
 import { PageHeader } from '@/components/PageHeader';
+import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 
 dayjs.extend(relativeTime);
 
@@ -35,6 +36,7 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
   const [sending, setSending] = useState(false);
   const [compose, setCompose] = useState('');
   const scrollRef = useRef<ScrollView | null>(null);
+  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadThreads = useCallback(async () => {
     setLoadingThreads(true);
@@ -60,12 +62,22 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
         setActiveThread(
           data.thread ?? {
             id: Date.now(),
-            otherUser: data.otherUser ?? { id: otherUserId, displayName: 'Member', username: null },
+            otherUser: {
+              id: otherUserId,
+              displayName: data.otherUser?.displayName ?? 'Member',
+              username: data.otherUser?.username ?? null,
+            },
             lastMessageAt: null,
             unreadCount: 0,
           },
         );
-        setMessages(data.messages);
+        setMessages(
+          data.messages.map((message) => ({
+            ...message,
+            deliveryState:
+              message.senderId === userId ? (message.readAt ? 'read' : 'sent') : message.deliveryState,
+          })),
+        );
         setCanMessage(Boolean(data.messaging.allowed));
         if (!data.messaging.allowed) {
           setMessagingError(data.messaging.reason ?? 'Messaging is disabled for this member.');
@@ -76,31 +88,135 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
         setLoadingConversation(false);
       }
     },
-    [],
+    [userId],
   );
+
+  const handleIncomingMessage = useCallback(
+    ({ thread, message, otherUserId, clientId }: { thread?: MessageThread; message: Message; otherUserId?: number; clientId?: string }) => {
+      const counterpartId = otherUserId ?? thread?.otherUser.id ?? activeUserId ?? 0;
+
+      setThreads((prev) => {
+        const nextThread = thread ?? prev.find((item) => item.otherUser.id === counterpartId);
+        if (!nextThread) {
+          return prev;
+        }
+
+        const filtered = prev.filter((item) => item.otherUser.id !== nextThread.otherUser.id);
+        const isActiveConversation = counterpartId !== 0 && counterpartId === activeUserId;
+
+        return [
+          {
+            ...nextThread,
+            lastMessage: message,
+            lastMessageAt: message.createdAt ?? nextThread.lastMessageAt,
+            unreadCount: message.senderId === userId || isActiveConversation ? 0 : (nextThread.unreadCount ?? 0) + 1,
+          },
+          ...filtered,
+        ];
+      });
+
+      if (clientId) {
+        setMessages((prev) =>
+          prev.map((item) =>
+            item.clientId === clientId
+              ? {
+                  ...message,
+                  deliveryState: message.readAt ? 'read' : 'sent',
+                }
+              : item,
+          ),
+        );
+      } else if (counterpartId !== 0 && counterpartId === activeUserId) {
+        setMessages((prev) => {
+          if (prev.some((item) => item.id === message.id)) {
+            return prev;
+          }
+          return [...prev, { ...message, deliveryState: message.readAt ? 'read' : 'sent' }];
+        });
+      }
+
+      if (thread && counterpartId === activeUserId) {
+        setActiveThread(thread);
+      }
+    },
+    [activeUserId, userId],
+  );
+
+  const handleMessagesRead = useCallback(({ userId: readerUserId, messageIds, readAt }: { userId: number; messageIds: number[]; readAt: string }) => {
+    setMessages((prev) =>
+      prev.map((item) =>
+        item.senderId === userId && messageIds.includes(item.id)
+          ? { ...item, readAt, deliveryState: 'read' }
+          : item,
+      ),
+    );
+
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.otherUser.id === readerUserId && thread.lastMessage && messageIds.includes(thread.lastMessage.id)
+          ? {
+              ...thread,
+              lastMessage: {
+                ...thread.lastMessage,
+                readAt,
+                deliveryState: 'read',
+              },
+            }
+          : thread,
+      ),
+    );
+  }, [userId]);
+
+  const { connectionState, presenceByUserId, typingByUserId, setTyping, markRead } = useRealtimeMessages({
+    userId: user?.id ?? null,
+    activeUserId,
+    onIncomingMessage: handleIncomingMessage,
+    onMessagesRead: handleMessagesRead,
+  });
 
   const handleSend = useCallback(async () => {
     if (!activeUserId || compose.trim() === '' || sending || !canMessage) return;
+
+    const clientId = `local-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: -Date.now(),
+      clientId,
+      senderId: userId,
+      body: compose.trim(),
+      createdAt: new Date().toISOString(),
+      deliveryState: 'sending',
+      readAt: null,
+    };
+
     setSending(true);
     setMessagingError(null);
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setCompose('');
+
     try {
-      const { thread, message } = await sendMessage(activeUserId, compose.trim());
-      setActiveThread(thread);
-      setMessages((prev) => [...prev, message]);
-      setCompose('');
-      setThreads((prev) => {
-        const filtered = prev.filter((t) => t.otherUser.id !== activeUserId);
-        return [{ ...thread }, ...filtered];
+      const { thread, message } = await sendMessage(activeUserId, optimisticMessage.body);
+      handleIncomingMessage({
+        thread,
+        message: { ...message, clientId, deliveryState: message.readAt ? 'read' : 'sent' },
+        otherUserId: activeUserId,
+        clientId,
       });
+      setActiveThread(thread);
       requestAnimationFrame(() => {
         scrollRef.current?.scrollToEnd({ animated: true });
       });
     } catch (error) {
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.clientId === clientId ? { ...item, deliveryState: 'failed' } : item,
+        ),
+      );
       setMessagingError(error instanceof Error ? error.message : 'Unable to send message.');
     } finally {
       setSending(false);
+      void setTyping(activeUserId, false);
     }
-  }, [activeUserId, canMessage, compose, sending]);
+  }, [activeUserId, canMessage, compose, handleIncomingMessage, sending, setTyping, userId]);
 
   const activeTitle = useMemo(() => {
     if (!activeThread) return 'Messages';
@@ -111,21 +227,51 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
     return preferredName ? `Chat with ${preferredName}` : 'Conversation';
   }, [activeThread]);
 
+  const activePresenceText = useMemo(() => {
+    if (!activeUserId) {
+      return connectionState === 'connected' ? 'Realtime connected' : 'Realtime offline';
+    }
+    if (typingByUserId[activeUserId]) {
+      return 'Typing...';
+    }
+    return presenceByUserId[activeUserId] ? 'Online' : 'Offline';
+  }, [activeUserId, connectionState, presenceByUserId, typingByUserId]);
+
+  const renderReceipt = useCallback((message: Message) => {
+    if (message.senderId !== userId) {
+      return null;
+    }
+    if (message.deliveryState === 'sending') {
+      return <Text style={styles.messageMetaPending}>...</Text>;
+    }
+    if (message.deliveryState === 'failed') {
+      return <Text style={styles.messageMetaFailed}>!</Text>;
+    }
+    return (
+      <Text style={message.readAt ? styles.messageMetaRead : styles.messageMetaDelivered}>
+        {'\u2713\u2713'}
+      </Text>
+    );
+  }, [userId]);
+
   const renderMessage = useCallback(
     (message: Message) => {
       const isMine = message.senderId === userId;
       return (
-        <View key={message.id} style={[styles.messageRow, isMine ? styles.messageRight : styles.messageLeft]}>
+        <View key={`${message.id}-${message.clientId ?? 'server'}`} style={[styles.messageRow, isMine ? styles.messageRight : styles.messageLeft]}>
           <View style={[styles.messageBubble, isMine ? styles.messageBubbleMine : styles.messageBubbleTheirs]}>
             <Text style={[styles.messageText, isMine && styles.messageTextMine]}>{message.body}</Text>
-            <Text style={[styles.messageMeta, isMine && styles.messageMetaMine]}>
-              {message.createdAt ? dayjs(message.createdAt).fromNow() : ''}
-            </Text>
+            <View style={styles.messageFooter}>
+              <Text style={[styles.messageMeta, isMine && styles.messageMetaMine]}>
+                {message.createdAt ? dayjs(message.createdAt).fromNow() : ''}
+              </Text>
+              {renderReceipt(message)}
+            </View>
           </View>
         </View>
       );
     },
-    [userId],
+    [renderReceipt, userId],
   );
 
   useEffect(() => {
@@ -143,6 +289,51 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
       openConversation(activeUserId);
     }
   }, [activeUserId, lastNotification, loadThreads, openConversation, refreshMatches, user]);
+
+  useEffect(() => {
+    if (!activeUserId || !userId) {
+      return;
+    }
+
+    const unreadIncomingIds = messages
+      .filter((message) => message.senderId !== userId && !message.readAt && message.id > 0)
+      .map((message) => message.id);
+
+    if (unreadIncomingIds.length === 0) {
+      return;
+    }
+
+    void markRead(activeUserId, unreadIncomingIds);
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.otherUser.id === activeUserId ? { ...thread, unreadCount: 0 } : thread,
+      ),
+    );
+  }, [activeUserId, markRead, messages, userId]);
+
+  useEffect(() => {
+    if (!activeUserId) {
+      return;
+    }
+    if (typingStopTimerRef.current) {
+      clearTimeout(typingStopTimerRef.current);
+    }
+    if (compose.trim() === '') {
+      void setTyping(activeUserId, false);
+      return;
+    }
+
+    void setTyping(activeUserId, true);
+    typingStopTimerRef.current = setTimeout(() => {
+      void setTyping(activeUserId, false);
+    }, 1500);
+
+    return () => {
+      if (typingStopTimerRef.current) {
+        clearTimeout(typingStopTimerRef.current);
+      }
+    };
+  }, [activeUserId, compose, setTyping]);
 
   if (!user) {
     return (
@@ -167,7 +358,11 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <PageHeader
           title={activeTitle}
-          subtitle={activeThread ? 'Stay focused on one conversation at a time.' : 'Open a recent thread or start from an accepted ride match.'}
+          subtitle={
+            activeThread
+              ? `${activePresenceText} • ${connectionState === 'connected' ? 'live' : 'offline sync'}`
+              : 'Open a recent thread or start from an accepted ride match.'
+          }
           rightAccessory={
             <TouchableOpacity onPress={onOpenAccount} style={styles.accountButton} activeOpacity={0.82}>
               <Text style={styles.accountButtonText}>Account</Text>
@@ -188,20 +383,24 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
             {threads.length === 0 && (
               <Text style={styles.empty}>No conversations yet. Start by messaging a ride match.</Text>
             )}
-            {threads.map((thread) => (
-              <TouchableOpacity key={thread.id} style={styles.threadRow} onPress={() => openConversation(thread.otherUser.id)}>
-                <View style={styles.threadText}>
-                  <Text style={styles.threadName}>{thread.otherUser.displayName ?? thread.otherUser.username ?? 'Member'}</Text>
-                  <Text style={styles.threadPreview}>
-                    {thread.lastMessage?.body ? thread.lastMessage.body.slice(0, 80) : 'No messages yet.'}
-                  </Text>
-                </View>
-                <View style={styles.threadMeta}>
-                  {thread.unreadCount ? <Text style={styles.unreadBadge}>{thread.unreadCount}</Text> : null}
-                  {thread.lastMessageAt && <Text style={styles.threadTime}>{dayjs(thread.lastMessageAt).fromNow()}</Text>}
-                </View>
-              </TouchableOpacity>
-            ))}
+            {threads.map((thread) => {
+              const isOnline = presenceByUserId[thread.otherUser.id] ?? thread.otherUser.isOnline ?? false;
+              return (
+                <TouchableOpacity key={thread.id} style={styles.threadRow} onPress={() => openConversation(thread.otherUser.id)}>
+                  <View style={styles.threadText}>
+                    <Text style={styles.threadName}>{thread.otherUser.displayName ?? thread.otherUser.username ?? 'Member'}</Text>
+                    <Text style={styles.threadStatus}>{isOnline ? 'Online' : 'Offline'}</Text>
+                    <Text style={styles.threadPreview}>
+                      {thread.lastMessage?.body ? thread.lastMessage.body.slice(0, 80) : 'No messages yet.'}
+                    </Text>
+                  </View>
+                  <View style={styles.threadMeta}>
+                    {thread.unreadCount ? <Text style={styles.unreadBadge}>{thread.unreadCount}</Text> : null}
+                    {thread.lastMessageAt && <Text style={styles.threadTime}>{dayjs(thread.lastMessageAt).fromNow()}</Text>}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
@@ -242,6 +441,11 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
                 <Text style={styles.link}>Back to inbox</Text>
               </TouchableOpacity>
             </View>
+            {typingByUserId[activeUserId ?? 0] ? (
+              <Text style={styles.typingIndicator}>
+                {activeThread.otherUser.displayName ?? activeThread.otherUser.username ?? 'They'} are typing...
+              </Text>
+            ) : null}
             <ScrollView ref={scrollRef} style={styles.messagesList} contentContainerStyle={styles.messagesContent}>
               {loadingConversation && <Text style={styles.subtitle}>Loading conversation...</Text>}
               {!loadingConversation && messages.map(renderMessage)}
@@ -333,6 +537,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: palette.text,
   },
+  threadStatus: {
+    color: palette.muted,
+    fontSize: 12,
+  },
   threadPreview: {
     color: palette.muted,
   },
@@ -358,6 +566,10 @@ const styles = StyleSheet.create({
   },
   card: {
     gap: spacing.sm,
+  },
+  typingIndicator: {
+    color: palette.primary,
+    fontWeight: '600',
   },
   messagesList: {
     maxHeight: 360,
@@ -393,12 +605,37 @@ const styles = StyleSheet.create({
   messageTextMine: {
     color: '#fff',
   },
+  messageFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   messageMeta: {
     color: palette.muted,
     fontSize: 11,
   },
   messageMetaMine: {
     color: '#d8e7ff',
+  },
+  messageMetaDelivered: {
+    color: '#d8e7ff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  messageMetaRead: {
+    color: '#8ed0ff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  messageMetaPending: {
+    color: '#d8e7ff',
+    fontSize: 11,
+  },
+  messageMetaFailed: {
+    color: '#ffd1d1',
+    fontSize: 11,
+    fontWeight: '700',
   },
   composer: {
     gap: spacing.sm,

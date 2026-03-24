@@ -6,6 +6,7 @@ export interface MessageThread {
     id: number;
     displayName?: string | null;
     username?: string | null;
+    isOnline?: boolean;
   };
   lastMessageAt?: string | null;
   lastMessage?: Message;
@@ -18,6 +19,8 @@ export interface Message {
   body: string;
   createdAt?: string | null;
   readAt?: string | null;
+  clientId?: string;
+  deliveryState?: 'sending' | 'sent' | 'read' | 'failed';
 }
 
 export interface MessagingAccess {
@@ -86,6 +89,10 @@ type SendResponse = {
   };
 };
 
+type ActionResponse = {
+  ok: boolean;
+};
+
 function mapMessage(row: ServerMessage): Message {
   return {
     id: row.id,
@@ -93,6 +100,7 @@ function mapMessage(row: ServerMessage): Message {
     body: row.body,
     createdAt: row.created_at,
     readAt: row.read_at,
+    deliveryState: row.read_at ? 'read' : 'sent',
   };
 }
 
@@ -169,4 +177,32 @@ export async function sendMessage(recipientId: number, body: string): Promise<{ 
     thread: mapThread(response.thread),
     message: mapMessage(response.message),
   };
+}
+
+export async function markConversationRead(otherUserId: number, messageIds: number[]): Promise<void> {
+  const csrf = getCsrfToken();
+  if (!csrf || messageIds.length === 0) {
+    return;
+  }
+
+  await apiClient.post<ActionResponse>('/messages.php', {
+    action: 'mark_read',
+    other_user_id: otherUserId,
+    message_ids: messageIds,
+    csrf,
+  });
+}
+
+export async function sendTypingIndicator(recipientId: number, isTyping: boolean): Promise<void> {
+  const csrf = getCsrfToken();
+  if (!csrf) {
+    return;
+  }
+
+  await apiClient.post<ActionResponse>('/messages.php', {
+    action: 'typing',
+    recipient_id: recipientId,
+    is_typing: isTyping,
+    csrf,
+  });
 }

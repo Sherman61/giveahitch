@@ -6,6 +6,10 @@ export const API_BASE_URL =
   'https://glitchahitch.com/api';
 
 const SITE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '');
+const MESSAGES_WS_URL =
+  process.env.EXPO_PUBLIC_MESSAGES_WS_URL ??
+  Constants.expoConfig?.extra?.messagesWsUrl ??
+  `${SITE_BASE_URL.replace(/^http/i, 'ws')}/ws/messages`;
 
 let csrfToken: string | null = null;
 
@@ -49,6 +53,10 @@ export function getCsrfToken() {
 
 export function getSiteBaseUrl() {
   return SITE_BASE_URL;
+}
+
+export function getMessagesWebSocketUrl() {
+  return MESSAGES_WS_URL;
 }
 
 export const apiClient = {
