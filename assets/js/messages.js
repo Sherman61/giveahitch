@@ -1242,8 +1242,8 @@ const init = async () => {
     updateTypingIndicator();
   }
   if (!window.WS_AUTH) {
-    logger.info('messages:ws_auth_missing', 'WS token missing; running in polling mode.', {
-      hint: 'Verify WS_BROADCAST_SECRET matches in PHP and ws server environments so /messages.php can generate window.WS_AUTH.',
+    logger.warn('messages:ws_auth_missing', {
+      hint: 'WS token missing. Verify WS_BROADCAST_SECRET is configured in both PHP and ws server env so /messages.php can generate window.WS_AUTH.',
     });
     startPolling('no_auth_token');
     return;
