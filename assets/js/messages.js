@@ -32,6 +32,8 @@ const state = {
   messages: [],
   socket: null,
   socketAuthed: false,
+  onlineUserIds: new Set(),
+  hasPresenceSnapshot: false,
   typingByUser: new Map(),
   typingTimers: new Map(),
   selfTyping: { active: false, timeout: null, lastSentAt: 0 },
@@ -44,6 +46,8 @@ const state = {
 };
 
 const isSocketReady = () => !!(state.socket && state.socket.connected && state.socketAuthed);
+const hasPresenceData = () => isSocketReady() && state.hasPresenceSnapshot;
+const isUserOnline = (userId) => !!(userId && state.onlineUserIds.has(Number(userId)));
 
 const escapeHtml = (value) => (value === null || value === undefined)
   ? ''
@@ -158,6 +162,10 @@ const computeConversationStatus = () => {
   if (otherId && state.typingByUser.has(otherId) && isSocketReady()) {
     const name = state.activeOtherUser.display_name || 'Member';
     return { text: `${name} is typing…`, highlight: true };
+  }
+
+  if (otherId && hasPresenceData()) {
+    return { text: isUserOnline(otherId) ? 'Online now' : 'Offline', highlight: isUserOnline(otherId) };
   }
 
   const allowed = !!(state.messaging?.allowed);
@@ -427,6 +435,9 @@ const renderThreads = () => {
     const last = thread.last_message || null;
     const isActive = state.activeThreadId === thread.id || state.activeUserId === other.id;
     const unread = Number(thread.unread_count || 0);
+    const showPresence = hasPresenceData();
+    const isOnline = !!(showPresence && other?.id && isUserOnline(other.id));
+    const presenceText = showPresence ? (isOnline ? 'Online' : 'Offline') : '';
     const bodyPreview = last ? summarise(last.body || '') : 'No messages yet';
     const otherTyping = other?.id && state.typingByUser.has(other.id) && isSocketReady();
     const previewText = otherTyping ? 'Typing…' : bodyPreview;
@@ -437,6 +448,7 @@ const renderThreads = () => {
         <div class="d-flex justify-content-between align-items-start gap-2">
           <div>
             <div class="fw-semibold">${escapeHtml(other.display_name || 'Member')}</div>
+            ${presenceText ? `<div class="small ${isOnline ? 'text-success' : 'text-secondary'}">${presenceText}</div>` : ''}
             <div class="${previewClass}">${escapeHtml(previewText || '')}</div>
           </div>
           <div class="text-end small">
@@ -563,6 +575,9 @@ const renderConversationHeader = () => {
   }
 
   const { text: statusText } = computeConversationStatus();
+  const showPresence = hasPresenceData();
+  const isOnline = !!(showPresence && other?.id && isUserOnline(other.id));
+  const presenceText = showPresence ? (isOnline ? 'Online now' : 'Offline') : '';
   const controls = [];
   const hasThread = !!state.activeThreadId || state.messages.length > 0;
   if (hasThread) {
@@ -583,6 +598,7 @@ const renderConversationHeader = () => {
       <div>
         <h2 class="h5 mb-0">Chat with ${escapeHtml(other.display_name || 'Member')}</h2>
         ${other.username ? `<div class="text-secondary">@${escapeHtml(other.username)}</div>` : ''}
+        ${presenceText ? `<div class="small ${isOnline ? 'text-success' : 'text-secondary'}">${presenceText}</div>` : ''}
       </div>
       ${controlsHtml}
     </div>
@@ -594,6 +610,9 @@ const renderConversationHeader = () => {
 const upsertThread = (thread) => {
   if (!thread || !thread.id) return;
   const otherId = thread.other_user?.id;
+  if (otherId) {
+    thread.other_user.is_online = state.onlineUserIds.has(Number(otherId));
+  }
   const existingIndex = state.threads.findIndex((t) => t.id === thread.id);
   if (existingIndex >= 0) {
     state.threads.splice(existingIndex, 1);
@@ -605,6 +624,29 @@ const upsertThread = (thread) => {
     }
   }
   state.threads.unshift(thread);
+};
+
+const setUserOnlineState = (userId, online, { rerender = true } = {}) => {
+  const numericUserId = Number(userId);
+  if (!Number.isFinite(numericUserId) || numericUserId <= 0) return;
+  if (online) {
+    state.onlineUserIds.add(numericUserId);
+  } else {
+    state.onlineUserIds.delete(numericUserId);
+  }
+  state.threads.forEach((thread) => {
+    if (thread?.other_user?.id === numericUserId) {
+      thread.other_user.is_online = !!online;
+    }
+  });
+  if (state.activeOtherUser?.id === numericUserId) {
+    state.activeOtherUser.is_online = !!online;
+  }
+  if (rerender) {
+    renderThreads();
+    renderConversationHeader();
+    updateConversationStatusText();
+  }
 };
 
 const fetchThreads = async ({ keepSelection = true, skipIfBusy = false } = {}) => {
@@ -657,6 +699,9 @@ const fetchConversation = async (userId, options = {}) => {
     clearAllDeleteTimers();
     state.activeUserId = targetId;
     state.activeOtherUser = data.other_user || null;
+    if (state.activeOtherUser?.id) {
+      state.activeOtherUser.is_online = isUserOnline(state.activeOtherUser.id);
+    }
     state.messaging = data.messaging || { allowed: false, reason: '' };
     state.messages = Array.isArray(data.messages) ? data.messages.map((msg) => ({ ...msg, pending: false })) : [];
     if (preservePending && pendingSnapshot.length) {
@@ -876,6 +921,17 @@ const authenticateSocket = (socket) => {
         return;
       }
       state.socketAuthed = true;
+      state.hasPresenceSnapshot = true;
+      const onlineIds = Array.isArray(response.online_user_ids) ? response.online_user_ids : [];
+      state.onlineUserIds.clear();
+      onlineIds.forEach((id) => {
+        const numericId = Number(id);
+        if (Number.isFinite(numericId) && numericId > 0) {
+          state.onlineUserIds.add(numericId);
+        }
+      });
+      renderThreads();
+      renderConversationHeader();
       stopPolling();
       logger.info('messages:socket_auth_ok', {
         rooms: Array.isArray(response.rooms) ? response.rooms : undefined,
@@ -883,8 +939,9 @@ const authenticateSocket = (socket) => {
     });
   } catch (err) {
     logger.warn('messages:socket_auth_error', err);
-    state.socketAuthed = false;
-    startPolling('auth_error');
+      state.socketAuthed = false;
+      state.hasPresenceSnapshot = false;
+      startPolling('auth_error');
   }
 };
 
@@ -944,6 +1001,14 @@ const handleSocketTyping = (payload) => {
   const senderId = Number(payload.sender_id || 0);
   if (!senderId) return;
   setTypingForUser(senderId, !!payload.typing);
+};
+
+const handleSocketPresence = (payload) => {
+  if (!payload) return;
+  const userId = Number(payload.user_id || payload.userId || 0);
+  if (!userId) return;
+  state.hasPresenceSnapshot = true;
+  setUserOnlineState(userId, !!payload.online, { rerender: true });
 };
 
 const handleSocketRead = (payload) => {
@@ -1080,6 +1145,10 @@ const initSocket = () => {
       handleSocketRead(payload);
     });
 
+    socket.on('dm:presence', (payload) => {
+      handleSocketPresence(payload);
+    });
+
     socket.on('dm:delete', (payload) => {
       handleSocketDelete(payload);
     });
@@ -1092,8 +1161,12 @@ const initSocket = () => {
     socket.on('disconnect', (reason) => {
       logger.info('messages:socket_disconnected', { reason });
       state.socketAuthed = false;
+      state.hasPresenceSnapshot = false;
+      state.onlineUserIds.clear();
       stopSelfTyping(false);
       resetTypingState();
+      renderThreads();
+      renderConversationHeader();
       startPolling('disconnect');
     });
   } catch (err) {
@@ -1169,7 +1242,11 @@ const init = async () => {
     updateTypingIndicator();
   }
   if (!window.WS_AUTH) {
+    logger.info('messages:ws_auth_missing', 'WS token missing; running in polling mode.', {
+      hint: 'Verify WS_BROADCAST_SECRET matches in PHP and ws server environments so /messages.php can generate window.WS_AUTH.',
+    });
     startPolling('no_auth_token');
+    return;
   }
   initSocket();
 };
