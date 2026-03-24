@@ -6,13 +6,15 @@ import { UserProfile } from '@/types/user';
 import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { PageHeader } from '@/components/PageHeader';
 
 interface Props {
   user: UserProfile;
   onLogout: () => void;
+  onBack: () => void;
 }
 
-export const ProfileScreen: FC<Props> = ({ user, onLogout }) => {
+export const ProfileScreen: FC<Props> = ({ user, onLogout, onBack }) => {
   const { profile, loading, error } = useProfileDetails(Boolean(user));
   const details: ProfileDetails =
     profile ?? {
@@ -39,8 +41,7 @@ export const ProfileScreen: FC<Props> = ({ user, onLogout }) => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Profile</Text>
-      <Text style={styles.subtitle}>Manage your contact, stats, and reputation.</Text>
+      <PageHeader title="Profile" subtitle="Manage your contact details, stats, and reputation." onBack={onBack} />
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{details.displayName ?? details.name}</Text>
@@ -74,19 +75,19 @@ export const ProfileScreen: FC<Props> = ({ user, onLogout }) => {
         <Text style={styles.bodyText}>
           Driver rating:{' '}
           {details.ratings.driver
-            ? `${details.ratings.driver.average ?? '—'} (${details.ratings.driver.count})`
+            ? `${details.ratings.driver.average ?? '-'} (${details.ratings.driver.count})`
             : 'No ratings yet'}
         </Text>
         <Text style={styles.bodyText}>
           Passenger rating:{' '}
           {details.ratings.passenger
-            ? `${details.ratings.passenger.average ?? '—'} (${details.ratings.passenger.count})`
+            ? `${details.ratings.passenger.average ?? '-'} (${details.ratings.passenger.count})`
             : 'No ratings yet'}
         </Text>
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
-      {loading && <Text style={styles.metaText}>Refreshing profile…</Text>}
+      {loading && <Text style={styles.metaText}>Refreshing profile...</Text>}
 
       <PrimaryButton label="Log out" onPress={onLogout} />
     </ScrollView>
@@ -109,14 +110,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
     paddingBottom: spacing.xl,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: palette.muted,
-    marginBottom: spacing.sm,
   },
   card: {
     backgroundColor: '#fff',

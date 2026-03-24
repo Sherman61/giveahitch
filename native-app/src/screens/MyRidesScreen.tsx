@@ -1,7 +1,6 @@
 import { FC, useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, RefreshControl, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, RefreshControl, View, TouchableOpacity } from 'react-native';
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { QuickNavStrip } from '@/components/QuickNavStrip';
 import { useRides } from '@/hooks/useRides';
 import { useMyMatches } from '@/hooks/useMyMatches';
 import { UserProfile } from '@/types/user';
@@ -15,33 +14,41 @@ import { RideEditModal } from '@/components/RideEditModal';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useAlerts } from '@/hooks/useAlerts';
 import { AlertsBadgeButton } from '@/components/AlertsBadgeButton';
+import { PageHeader } from '@/components/PageHeader';
 
 interface Props {
   user?: UserProfile | null;
-  onNavigate: (key: string) => void;
   onRequestLogin: () => void;
+  onOpenAlerts: () => void;
+  onOpenAccount: () => void;
+  onOpenBrowse: () => void;
+  onOpenMessages: () => void;
+  onOpenPost: () => void;
 }
 
-export const MyRidesScreen: FC<Props> = ({ user, onNavigate, onRequestLogin }) => {
+export const MyRidesScreen: FC<Props> = ({
+  user,
+  onRequestLogin,
+  onOpenAlerts,
+  onOpenAccount,
+  onOpenBrowse,
+  onOpenMessages,
+  onOpenPost,
+}) => {
   const { rides, loading, error, refresh } = useRides({ mine: true, all: true, pollEveryMs: 30000 });
   const { matchesByRideId, matchesList } = useMyMatches(user ?? null);
   const [managedRide, setManagedRide] = useState<RideSummary | null>(null);
   const [editingRide, setEditingRide] = useState<RideSummary | null>(null);
-  const [manageRefreshTick, setManageRefreshTick] = useState(0);
   const { lastNotification } = useNotifications();
   const { unreadCount } = useAlerts(Boolean(user?.id));
 
-  const handleManageRide = useCallback(
-    (ride: RideSummary) => {
-      setManagedRide(ride);
-    },
-    [],
-  );
+  const handleManageRide = useCallback((ride: RideSummary) => {
+    setManagedRide(ride);
+  }, []);
 
-  const handleExploreRides = useCallback(() => onNavigate('rides'), [onNavigate]);
+  const handleExploreRides = useCallback(() => onOpenBrowse(), [onOpenBrowse]);
   const handleRideUpdated = useCallback(() => {
     refresh();
-    setManageRefreshTick((tick) => tick + 1);
   }, [refresh]);
 
   const handleRideDeleted = useCallback(() => {
@@ -63,7 +70,7 @@ export const MyRidesScreen: FC<Props> = ({ user, onNavigate, onRequestLogin }) =
       <View style={[styles.container, styles.centered]}>
         <View style={styles.banner}>
           <Text style={styles.title}>Sign in to view your rides</Text>
-          <Text style={styles.subtitle}>Access rides you've posted or joined.</Text>
+          <Text style={styles.subtitle}>Access the rides you posted and the rides you joined.</Text>
           <PrimaryButton label="Log In" onPress={onRequestLogin} />
         </View>
       </View>
@@ -77,38 +84,39 @@ export const MyRidesScreen: FC<Props> = ({ user, onNavigate, onRequestLogin }) =
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}
       >
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.title}>My rides</Text>
-            <Text style={styles.subtitle}>Manage your ride offers and requests.</Text>
-          </View>
-          <AlertsBadgeButton count={unreadCount} onPress={() => onNavigate('alerts')} />
+        <PageHeader
+          title="My rides"
+          subtitle="Track what you posted and what you joined without bouncing around the app."
+          rightAccessory={
+            <View style={styles.headerActions}>
+              <AlertsBadgeButton count={unreadCount} onPress={onOpenAlerts} />
+              <TouchableOpacity onPress={onOpenAccount} style={styles.accountButton} activeOpacity={0.82}>
+                <Text style={styles.accountButtonText}>Account</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+
+        <View style={styles.actionRow}>
+          <PrimaryButton label="Browse rides" onPress={onOpenBrowse} variant="secondary" style={styles.actionButton} />
+          <PrimaryButton label="Post a ride" onPress={onOpenPost} style={styles.actionButton} />
         </View>
+        <PrimaryButton label="Messages" onPress={onOpenMessages} variant="secondary" />
 
-      <QuickNavStrip
-        items={[
-          { key: 'rides', title: 'Explore', subtitle: 'Browse new rides' },
-          { key: 'postRide', title: 'Post Ride', subtitle: 'Share availability' },
-          { key: 'messages', title: 'Messages', subtitle: 'Conversations' },
-        ]}
-        onSelect={onNavigate}
-        refreshSignal={manageRefreshTick}
-      />
+        {error && <Text style={styles.error}>{error}</Text>}
 
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      {!loading && !error && (
-        <>
-          <MyPostedRidesSection
-            rides={rides}
-            currentUser={user}
-            matchesByRideId={matchesByRideId}
-            onRequireLogin={onRequestLogin}
-            onManageRide={handleManageRide}
-          />
-          <MyRespondedRidesSection matches={matchesList} onExploreRides={handleExploreRides} />
-        </>
-      )}
+        {!loading && !error && (
+          <>
+            <MyPostedRidesSection
+              rides={rides}
+              currentUser={user}
+              matchesByRideId={matchesByRideId}
+              onRequireLogin={onRequestLogin}
+              onManageRide={handleManageRide}
+            />
+            <MyRespondedRidesSection matches={matchesList} onExploreRides={handleExploreRides} />
+          </>
+        )}
       </ScrollView>
       <RideManageModal
         ride={managedRide}
@@ -117,7 +125,11 @@ export const MyRidesScreen: FC<Props> = ({ user, onNavigate, onRequestLogin }) =
         onEdit={(ride) => setEditingRide(ride)}
         onRideUpdated={handleRideUpdated}
         onRideDeleted={handleRideDeleted}
-        onNavigate={onNavigate}
+        onNavigate={(key) => {
+          if (key === 'messages') onOpenMessages();
+          if (key === 'rides') onOpenBrowse();
+          if (key === 'postRide') onOpenPost();
+        }}
       />
       <RideEditModal
         ride={editingRide}
@@ -165,10 +177,26 @@ const styles = StyleSheet.create({
   error: {
     color: palette.danger,
   },
-  headerRow: {
+  headerActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: spacing.md,
+  },
+  accountButton: {
+    backgroundColor: '#edf3f9',
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  accountButtonText: {
+    color: palette.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionButton: {
+    flex: 1,
   },
 });

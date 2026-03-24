@@ -6,15 +6,17 @@ import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { MatchCard } from '@/components/MatchCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { PageHeader } from '@/components/PageHeader';
 
 interface Props {
   user?: UserProfile | null;
   onRequestLogin: () => void;
+  onBack: () => void;
 }
 
 const RATEABLE_STATUSES = new Set(['completed', 'confirmed', 'in_progress']);
 
-export const RateRidesScreen: FC<Props> = ({ user, onRequestLogin }) => {
+export const RateRidesScreen: FC<Props> = ({ user, onRequestLogin, onBack }) => {
   const { matchesList } = useMyMatches(user ?? null);
 
   if (!user) {
@@ -35,11 +37,10 @@ export const RateRidesScreen: FC<Props> = ({ user, onRequestLogin }) => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Rate rides</Text>
-      <Text style={styles.subtitle}>Thank your drivers or passengers after each trip.</Text>
+      <PageHeader title="Rate rides" subtitle="Leave feedback for completed and active trip matches." onBack={onBack} />
 
       {pendingRatings.length === 0 && (
-        <Text style={styles.empty}>No rides waiting for ratings right now.</Text>
+        <Text style={styles.empty}>No rides are waiting for ratings right now.</Text>
       )}
 
       {pendingRatings.map((match) => (

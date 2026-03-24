@@ -10,15 +10,17 @@ import { MatchCard } from '@/components/MatchCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { useNotifications } from '@/hooks/useNotifications';
 import { fetchConversation, fetchThreads, Message, MessageThread, sendMessage } from '@/api/messages';
+import { PageHeader } from '@/components/PageHeader';
 
 dayjs.extend(relativeTime);
 
 interface Props {
   user?: UserProfile | null;
   onRequestLogin: () => void;
+  onOpenAccount: () => void;
 }
 
-export const MessagesScreen: FC<Props> = ({ user, onRequestLogin }) => {
+export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount }) => {
   const { matchesList, refreshMatches } = useMyMatches(user ?? null);
   const { lastNotification } = useNotifications();
   const userId = user?.id ?? 0;
@@ -145,7 +147,15 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin }) => {
   if (!user) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.title}>Sign in to view messages</Text>
+        <PageHeader
+          title="Messages"
+          subtitle="Your inbox stays focused on accepted ride conversations."
+          rightAccessory={
+            <TouchableOpacity onPress={onOpenAccount} style={styles.accountButton} activeOpacity={0.82}>
+              <Text style={styles.accountButtonText}>Log In</Text>
+            </TouchableOpacity>
+          }
+        />
         <Text style={styles.subtitle}>Chat with drivers or passengers after you accept a ride.</Text>
         <PrimaryButton label="Log In" onPress={onRequestLogin} />
       </View>
@@ -155,8 +165,15 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin }) => {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>{activeTitle}</Text>
-        <Text style={styles.subtitle}>Conversations with your ride matches.</Text>
+        <PageHeader
+          title={activeTitle}
+          subtitle={activeThread ? 'Stay focused on one conversation at a time.' : 'Open a recent thread or start from an accepted ride match.'}
+          rightAccessory={
+            <TouchableOpacity onPress={onOpenAccount} style={styles.accountButton} activeOpacity={0.82}>
+              <Text style={styles.accountButtonText}>Account</Text>
+            </TouchableOpacity>
+          }
+        />
 
         {messagingError && <Text style={styles.error}>{messagingError}</Text>}
 
@@ -165,7 +182,7 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin }) => {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent conversations</Text>
               <TouchableOpacity onPress={loadThreads} disabled={loadingThreads}>
-                <Text style={styles.link}>{loadingThreads ? 'Refreshing…' : 'Refresh'}</Text>
+                <Text style={styles.link}>{loadingThreads ? 'Refreshing...' : 'Refresh'}</Text>
               </TouchableOpacity>
             </View>
             {threads.length === 0 && (
@@ -188,37 +205,45 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin }) => {
           </View>
         )}
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Ride matches</Text>
-            <TouchableOpacity onPress={refreshMatches}>
-              <Text style={styles.link}>Refresh</Text>
-            </TouchableOpacity>
-          </View>
-
-          {matchesList.length === 0 && <Text style={styles.empty}>You don't have any ride matches yet.</Text>}
-
-          {matchesList.map((match) => (
-            <View key={match.matchId} style={styles.card}>
-              <MatchCard match={match} />
-              <PrimaryButton
-                label={match.otherUserName ? `Message ${match.otherUserName}` : 'Open chat'}
-                onPress={() => match.otherUserId && openConversation(match.otherUserId)}
-              />
+        {!activeThread && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Ride matches</Text>
+              <TouchableOpacity onPress={refreshMatches}>
+                <Text style={styles.link}>Refresh</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-        </View>
+
+            {matchesList.length === 0 && <Text style={styles.empty}>You do not have any ride matches yet.</Text>}
+
+            {matchesList.map((match) => (
+              <View key={match.matchId} style={styles.card}>
+                <MatchCard match={match} />
+                <PrimaryButton
+                  label={match.otherUserName ? `Message ${match.otherUserName}` : 'Open chat'}
+                  onPress={() => match.otherUserId && openConversation(match.otherUserId)}
+                />
+              </View>
+            ))}
+          </View>
+        )}
 
         {activeThread && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Conversation</Text>
-              <TouchableOpacity onPress={() => setActiveThread(null)}>
+              <TouchableOpacity
+                onPress={() => {
+                  setActiveThread(null);
+                  setActiveUserId(null);
+                  setMessages([]);
+                }}
+              >
                 <Text style={styles.link}>Back to inbox</Text>
               </TouchableOpacity>
             </View>
             <ScrollView ref={scrollRef} style={styles.messagesList} contentContainerStyle={styles.messagesContent}>
-              {loadingConversation && <Text style={styles.subtitle}>Loading conversation…</Text>}
+              {loadingConversation && <Text style={styles.subtitle}>Loading conversation...</Text>}
               {!loadingConversation && messages.map(renderMessage)}
               {!loadingConversation && messages.length === 0 && (
                 <Text style={styles.empty}>Say hi to start this conversation.</Text>
@@ -235,7 +260,7 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin }) => {
                 onChangeText={setCompose}
                 multiline
               />
-              <PrimaryButton label={!canMessage ? 'Messaging disabled' : sending ? 'Sending…' : 'Send'} onPress={handleSend} />
+              <PrimaryButton label={!canMessage ? 'Messaging disabled' : sending ? 'Sending...' : 'Send'} onPress={handleSend} />
             </View>
           </View>
         )}
@@ -255,40 +280,30 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
     padding: spacing.lg,
-    gap: spacing.md,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
+    justifyContent: 'center',
   },
   subtitle: {
     color: palette.muted,
   },
-  empty: {
-    color: palette.muted,
-    fontStyle: 'italic',
+  error: {
+    color: palette.danger,
   },
-  card: {
+  section: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: spacing.md,
-    gap: spacing.sm,
+    padding: spacing.lg,
+    gap: spacing.md,
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
-  section: {
-    gap: spacing.sm,
-  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: spacing.sm,
   },
   sectionTitle: {
     fontSize: 18,
@@ -298,53 +313,54 @@ const styles = StyleSheet.create({
     color: palette.primary,
     fontWeight: '600',
   },
+  empty: {
+    color: palette.muted,
+  },
   threadRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: spacing.md,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-    marginBottom: spacing.sm,
-    gap: spacing.md,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e8ecef',
   },
   threadText: {
     flex: 1,
+    gap: 4,
   },
   threadName: {
     fontWeight: '700',
+    color: palette.text,
   },
   threadPreview: {
     color: palette.muted,
   },
   threadMeta: {
     alignItems: 'flex-end',
-    gap: spacing.xs,
+    gap: 4,
   },
   unreadBadge: {
+    minWidth: 22,
+    textAlign: 'center',
     backgroundColor: palette.primary,
     color: '#fff',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
     borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    overflow: 'hidden',
+    fontSize: 12,
     fontWeight: '700',
   },
   threadTime: {
     color: palette.muted,
     fontSize: 12,
   },
+  card: {
+    gap: spacing.sm,
+  },
   messagesList: {
-    maxHeight: 320,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: spacing.md,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    maxHeight: 360,
   },
   messagesContent: {
     gap: spacing.sm,
@@ -359,17 +375,17 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   messageBubble: {
-    maxWidth: '85%',
-    padding: spacing.sm,
-    borderRadius: 12,
+    maxWidth: '84%',
+    borderRadius: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: 4,
   },
   messageBubbleMine: {
     backgroundColor: palette.primary,
-    borderBottomRightRadius: 2,
   },
   messageBubbleTheirs: {
-    backgroundColor: '#f4f5f7',
-    borderBottomLeftRadius: 2,
+    backgroundColor: '#eef2f6',
   },
   messageText: {
     color: palette.text,
@@ -379,27 +395,33 @@ const styles = StyleSheet.create({
   },
   messageMeta: {
     color: palette.muted,
-    fontSize: 10,
-    marginTop: 4,
-    textAlign: 'right',
+    fontSize: 11,
   },
   messageMetaMine: {
-    color: '#f0f4ff',
+    color: '#d8e7ff',
   },
   composer: {
     gap: spacing.sm,
-    marginTop: spacing.sm,
   },
   input: {
+    minHeight: 52,
     borderWidth: 1,
     borderColor: '#ced4da',
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     backgroundColor: '#fff',
-    minHeight: 48,
+    textAlignVertical: 'top',
   },
-  error: {
-    color: palette.danger,
+  accountButton: {
+    backgroundColor: '#edf3f9',
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  accountButtonText: {
+    color: palette.text,
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

@@ -5,10 +5,12 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { sendPushTestNotification } from '@/api/notifications';
 import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface Props {
   isAuthenticated: boolean;
   onRequireLogin: () => void;
+  onBack: () => void;
 }
 
 type StatusKind = 'idle' | 'success' | 'error';
@@ -16,6 +18,7 @@ type StatusKind = 'idle' | 'success' | 'error';
 export const PushNotificationTestScreen: FC<Props> = ({
   isAuthenticated,
   onRequireLogin,
+  onBack,
 }) => {
   const { expoPushToken, registerAsync } = useNotifications();
   const [registering, setRegistering] = useState(false);
@@ -38,7 +41,7 @@ export const PushNotificationTestScreen: FC<Props> = ({
       setStatusMessage(
         error instanceof Error
           ? error.message
-          : 'Unable to register this device right now.'
+          : 'Unable to register this device right now.',
       );
     } finally {
       setRegistering(false);
@@ -63,7 +66,7 @@ export const PushNotificationTestScreen: FC<Props> = ({
     } catch (error) {
       setStatusKind('error');
       setStatusMessage(
-        error instanceof Error ? error.message : 'Push test failed.'
+        error instanceof Error ? error.message : 'Push test failed.',
       );
     } finally {
       setSending(false);
@@ -84,11 +87,11 @@ export const PushNotificationTestScreen: FC<Props> = ({
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Push Notifications Test</Text>
-      <Text style={styles.description}>
-        Inspect this device's subscription status, refresh its Expo token, and trigger a remote push
-        test.
-      </Text>
+      <PageHeader
+        title="Push notifications test"
+        subtitle="Inspect device registration, refresh the Expo token, and trigger a remote test."
+        onBack={onBack}
+      />
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Subscription status</Text>
@@ -121,8 +124,7 @@ export const PushNotificationTestScreen: FC<Props> = ({
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Remote test</Text>
         <Text style={styles.body}>
-          Once a subscription exists, send a push notification to confirm FCM /
-          APNs delivery.
+          Once a subscription exists, send a push notification to confirm FCM and APNs delivery.
         </Text>
         <PrimaryButton
           label="Send push test"

@@ -5,8 +5,13 @@ import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { useNotifications } from '@/hooks/useNotifications';
+import { PageHeader } from '@/components/PageHeader';
 
-export const AlertsScreen: FC = () => {
+interface Props {
+  onBack: () => void;
+}
+
+export const AlertsScreen: FC<Props> = ({ onBack }) => {
   const { items, unreadCount, loading, error, refresh, markAllRead } = useAlerts(true);
   const { lastNotification } = useNotifications();
 
@@ -22,13 +27,8 @@ export const AlertsScreen: FC = () => {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}
     >
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.title}>Alerts</Text>
-          <Text style={styles.subtitle}>{unreadCount} unread notifications</Text>
-        </View>
-        <PrimaryButton label="Mark all read" onPress={markAllRead} variant="secondary" />
-      </View>
+      <PageHeader title="Alerts" subtitle={`${unreadCount} unread notifications`} onBack={onBack} />
+      <PrimaryButton label="Mark all read" onPress={markAllRead} variant="secondary" />
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -54,18 +54,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
     paddingBottom: spacing.xl,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: palette.muted,
   },
   error: {
     color: palette.danger,

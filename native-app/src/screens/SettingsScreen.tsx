@@ -5,7 +5,13 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
 import { EditProfileScreen } from './EditProfileScreen';
-export const SettingsScreen: FC = () => {
+import { PageHeader } from '@/components/PageHeader';
+
+interface Props {
+  onBack: () => void;
+}
+
+export const SettingsScreen: FC<Props> = ({ onBack }) => {
   const { expoPushToken, registerAsync, scheduleLocalTest } = useNotifications();
 
   const openLink = (path: string) => {
@@ -14,11 +20,10 @@ export const SettingsScreen: FC = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Settings</Text>
-      <Text style={styles.subtitle}>Control alerts, quick links, and support resources.</Text>
+      <PageHeader title="Settings" subtitle="Control alerts, profile details, and support resources." onBack={onBack} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Alerts & notifications</Text>
+        <Text style={styles.sectionTitle}>Alerts and notifications</Text>
         <PrimaryButton label="Enable push notifications" onPress={registerAsync} />
         <TouchableOpacity style={styles.secondaryButton} onPress={scheduleLocalTest}>
           <Text style={styles.secondaryButtonText}>Send test notification</Text>
@@ -32,7 +37,8 @@ export const SettingsScreen: FC = () => {
           </View>
         )}
       </View>
-<EditProfileScreen />
+
+      <EditProfileScreen />
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Quick links</Text>
@@ -50,8 +56,7 @@ export const SettingsScreen: FC = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Support</Text>
         <Text style={styles.bodyText}>
-          Need help? whatsapp <Text style={styles.linkText}>8452441202</Text> or open the
-          Help Center from the web dashboard.
+          Need help? WhatsApp <Text style={styles.linkText}>8452441202</Text> or open the Help Center from the web dashboard.
         </Text>
       </View>
     </ScrollView>
@@ -66,13 +71,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.lg,
     paddingBottom: spacing.xl,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: palette.muted,
   },
   section: {
     backgroundColor: '#fff',

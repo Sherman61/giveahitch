@@ -71,7 +71,7 @@ export const RideCard: FC<Props> = ({
     const level = ride.contactVisibility?.level;
     if (level === 2) return 'Visible to logged-in members';
     if (level === 3) return 'Public while they have an active ride';
-    return 'Share after a ride is accepted (default)';
+    return 'Share after a ride is accepted';
   }, [ride.contactVisibility?.level]);
 
   const contactBlock = useMemo(() => {
@@ -104,25 +104,28 @@ export const RideCard: FC<Props> = ({
   return (
     <Card>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerMain}>
           <View style={styles.typeRow}>
             <Text style={[styles.typePill, ride.type === 'request' && styles.requestPill]}>
               {ride.type === 'offer' ? 'Offer' : 'Request'}
             </Text>
             {isOwnRide && <Text style={styles.badge}>Your ride</Text>}
           </View>
-          <Text style={styles.ownerText}>by {ride.ownerName}</Text>
+          <Text style={styles.route}>{`${ride.origin} to ${ride.destination}`}</Text>
         </View>
         <Text style={[styles.statusPill, { color: statusTextColor, borderColor: statusTextColor }]}>{statusLabel}</Text>
       </View>
 
-      <Text style={styles.route}>{`${ride.origin} -> ${ride.destination}`}</Text>
       <View style={styles.metaRow}>
-        <Text style={styles.metaText}>Seats: {seatLabel}</Text>
+        <Text style={styles.metaText}>{seatLabel}</Text>
         {startLabel && <Text style={styles.metaText}>Starts {startLabel}</Text>}
         {endLabel && <Text style={styles.metaText}>Ends {endLabel}</Text>}
       </View>
-      {createdRelative && <Text style={styles.metaSubtle}>Posted {createdRelative}</Text>}
+
+      <View style={styles.secondaryRow}>
+        <Text style={styles.ownerText}>Posted by {ride.ownerName}</Text>
+        {createdRelative && <Text style={styles.metaSubtle}>Posted {createdRelative}</Text>}
+      </View>
 
       {ride.note ? (
         <View style={styles.noteBox}>
@@ -157,8 +160,8 @@ export const RideCard: FC<Props> = ({
           ownerId={ride.ownerId}
           status={ride.status}
           currentUserId={currentUserId}
-          onAccepted={onRideAccepted}
           onRequireLogin={onRequireLogin}
+          onAccepted={onRideAccepted}
         />
       )}
     </Card>
@@ -169,137 +172,138 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  headerMain: {
+    flex: 1,
     gap: spacing.sm,
   },
   typeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    flexWrap: 'wrap',
   },
   typePill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: 999,
     backgroundColor: '#e7f0ff',
     color: palette.primary,
-    fontWeight: '600',
-    fontSize: 12,
-    textTransform: 'uppercase',
+    fontWeight: '700',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
   requestPill: {
-    backgroundColor: '#d9f5ec',
-    color: '#0f8a69',
+    backgroundColor: '#fff4e5',
+    color: '#b36b00',
   },
   badge: {
-    fontSize: 12,
-    color: palette.primary,
-    backgroundColor: '#e3edff',
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    borderRadius: 6,
-    textTransform: 'uppercase',
+    backgroundColor: '#edf2f7',
+    color: palette.muted,
+    fontWeight: '600',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
   ownerText: {
     color: palette.muted,
-    marginTop: 4,
   },
   statusPill: {
     borderWidth: 1,
-    borderColor: palette.primary,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
     borderRadius: 999,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    fontSize: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    fontWeight: '700',
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
   },
   route: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: spacing.sm,
     color: palette.text,
   },
   metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
+    gap: spacing.xs,
   },
   metaText: {
-    color: palette.muted,
-    fontSize: 12,
+    color: palette.text,
+  },
+  secondaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
   },
   metaSubtle: {
     color: palette.muted,
     fontSize: 12,
-    marginBottom: spacing.sm,
   },
   noteBox: {
-    backgroundColor: '#f5f7ff',
-    borderRadius: 8,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: spacing.md,
+    gap: spacing.xs,
   },
   noteLabel: {
     fontSize: 12,
     textTransform: 'uppercase',
     color: palette.muted,
-    marginBottom: 4,
+    letterSpacing: 0.5,
   },
   noteText: {
     color: palette.text,
   },
   contactBox: {
-    marginBottom: spacing.md,
-  },
-  manageBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
     padding: spacing.md,
-    borderRadius: 8,
-    backgroundColor: '#f0f5ff',
-    marginBottom: spacing.md,
-  },
-  manageText: {
-    color: palette.primaryDark,
-    marginBottom: spacing.sm,
-    fontWeight: '600',
-  },
-  manageButton: {
-    backgroundColor: palette.primary,
-    paddingVertical: spacing.sm,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  manageButtonLabel: {
-    color: '#fff',
-    fontWeight: '600',
+    gap: spacing.xs,
   },
   sectionTitle: {
-    fontWeight: '600',
-    marginBottom: 4,
+    fontSize: 13,
+    textTransform: 'uppercase',
+    color: palette.muted,
+    letterSpacing: 0.4,
   },
   contactLine: {
     color: palette.text,
   },
   contactNoticeBlock: {
-    gap: spacing.xs,
+    gap: 2,
   },
   contactNotice: {
-    color: palette.muted,
-    fontStyle: 'italic',
+    color: palette.text,
   },
   contactPrivacyHint: {
     color: palette.muted,
     fontSize: 12,
   },
-  matchStatus: {
+  manageBox: {
+    gap: spacing.sm,
+  },
+  manageText: {
+    color: palette.text,
+  },
+  manageButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#edf3f9',
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: 8,
-    backgroundColor: '#e6f4ea',
-    alignItems: 'center',
+  },
+  manageButtonLabel: {
+    color: palette.primary,
+    fontWeight: '700',
+  },
+  matchStatus: {
+    backgroundColor: '#eef5fb',
+    borderRadius: 10,
+    padding: spacing.md,
   },
   matchStatusText: {
-    color: '#137333',
+    color: palette.primary,
     fontWeight: '600',
   },
 });

@@ -1,8 +1,7 @@
 import { FC } from 'react';
-import { ScrollView, StyleSheet, Text, RefreshControl, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, RefreshControl, View, TouchableOpacity } from 'react-native';
 import { RideList } from '@/components/RideList';
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { QuickNavStrip } from '@/components/QuickNavStrip';
 import { useRides } from '@/hooks/useRides';
 import { useMyMatches } from '@/hooks/useMyMatches';
 import { UserProfile } from '@/types/user';
@@ -10,14 +9,25 @@ import { AlertsBadgeButton } from '@/components/AlertsBadgeButton';
 import { useAlerts } from '@/hooks/useAlerts';
 import { palette } from '@/constants/colors';
 import { spacing } from '@/constants/layout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface Props {
   user?: UserProfile | null;
   onRequestLogin: () => void;
-  onNavigate: (key: string) => void;
+  onOpenAlerts: () => void;
+  onOpenAccount: () => void;
+  onOpenMyRides: () => void;
+  onOpenPost: () => void;
 }
 
-export const RidesScreen: FC<Props> = ({ user, onRequestLogin, onNavigate }) => {
+export const RidesScreen: FC<Props> = ({
+  user,
+  onRequestLogin,
+  onOpenAlerts,
+  onOpenAccount,
+  onOpenMyRides,
+  onOpenPost,
+}) => {
   const { rides, loading, error, refresh } = useRides();
   const { matchesByRideId, refreshMatches, markRideAccepted } = useMyMatches(user ?? null);
   const { unreadCount } = useAlerts(Boolean(user?.id));
@@ -34,31 +44,36 @@ export const RidesScreen: FC<Props> = ({ user, onRequestLogin, onNavigate }) => 
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}
     >
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.title}>Rides</Text>
-          <Text style={styles.subtitle}>
-            {user ? `Welcome back, ${user.name}.` : 'Sign in to sync rides across devices.'}
-          </Text>
-        </View>
-        <AlertsBadgeButton count={unreadCount} onPress={() => onNavigate('alerts')} />
-      </View>
+      <PageHeader
+        title="Browse rides"
+        subtitle={
+          user
+            ? `Welcome back, ${user.name}. Find the next ride quickly.`
+            : 'Browse first, then sign in when you are ready to book, post, or message.'
+        }
+        rightAccessory={
+          <View style={styles.headerActions}>
+            <AlertsBadgeButton count={unreadCount} onPress={onOpenAlerts} />
+            <TouchableOpacity onPress={onOpenAccount} style={styles.accountButton} activeOpacity={0.82}>
+              <Text style={styles.accountButtonText}>{user ? 'Account' : 'Log In'}</Text>
+            </TouchableOpacity>
+          </View>
+        }
+      />
 
       {!user && (
         <View style={styles.banner}>
-          <Text style={styles.bannerText}>Log in to see your assigned rides, matches, and history.</Text>
+          <Text style={styles.bannerText}>
+            Sign in to keep your ride history, alerts, and accepted matches in sync across devices.
+          </Text>
           <PrimaryButton label="Log In" variant="secondary" onPress={onRequestLogin} />
         </View>
       )}
 
-      <QuickNavStrip
-        items={[
-          { key: 'myRides', title: 'My Rides', subtitle: 'View your posts' },
-          { key: 'postRide', title: 'Post Ride', subtitle: 'request or offer' },
-          
-        ]}
-        onSelect={onNavigate}
-      />
+      <View style={styles.ctaRow}>
+        <PrimaryButton label="Post a ride" onPress={onOpenPost} style={styles.ctaButton} />
+        <PrimaryButton label="My rides" onPress={onOpenMyRides} variant="secondary" style={styles.ctaButton} />
+      </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -69,7 +84,7 @@ export const RidesScreen: FC<Props> = ({ user, onRequestLogin, onNavigate }) => 
           matchesByRideId={matchesByRideId}
           onRequireLogin={onRequestLogin}
           onRideAccepted={handleRideAccepted}
-          emptyMessage="No rides found. Pull to refresh or schedule a new ride on the dashboard."
+          emptyMessage="No rides found right now. Pull to refresh or post a new ride."
         />
       )}
     </ScrollView>
@@ -84,24 +99,23 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.xl,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: palette.muted,
-    marginBottom: spacing.lg,
-  },
-  headerRow: {
+  headerActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+  },
+  accountButton: {
+    backgroundColor: '#edf3f9',
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  accountButtonText: {
+    color: palette.text,
+    fontWeight: '700',
+    fontSize: 13,
   },
   banner: {
-    backgroundColor: '#e9f2ff',
+    backgroundColor: '#eef5fb',
     padding: spacing.lg,
     borderRadius: 12,
     marginBottom: spacing.lg,
@@ -109,6 +123,15 @@ const styles = StyleSheet.create({
   },
   bannerText: {
     color: palette.text,
+    lineHeight: 20,
+  },
+  ctaRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  ctaButton: {
+    flex: 1,
   },
   error: {
     color: palette.danger,

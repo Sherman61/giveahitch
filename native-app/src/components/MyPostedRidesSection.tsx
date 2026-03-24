@@ -24,8 +24,8 @@ export const MyPostedRidesSection: FC<Props> = ({
 }) => {
   return (
     <View style={styles.card}>
-      <Text style={styles.heading}>Rides I posted</Text>
-      <Text style={styles.subheading}>Requests and offers created from this account.</Text>
+      <Text style={styles.heading}>Posted by me</Text>
+      <Text style={styles.subheading}>Requests and offers you created from this account.</Text>
       <RideList
         rides={rides}
         currentUser={currentUser}
@@ -33,7 +33,7 @@ export const MyPostedRidesSection: FC<Props> = ({
         onRequireLogin={onRequireLogin}
         onRideAccepted={() => {}}
         onManageRide={onManageRide}
-        emptyMessage="You haven't posted any rides yet."
+        emptyMessage="You have not posted any rides yet."
       />
     </View>
   );

@@ -15,7 +15,7 @@ export const AlertsBadgeButton: FC<Props> = ({ count, onPress }) => {
 
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} accessibilityLabel="View alerts">
-      <Text style={styles.icon}>🔔</Text>
+      <Text style={styles.label}>Alerts</Text>
       <View style={styles.badge}>
         <Text style={styles.badgeText}>{count}</Text>
       </View>
@@ -25,11 +25,16 @@ export const AlertsBadgeButton: FC<Props> = ({ count, onPress }) => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     marginLeft: spacing.sm,
+    borderRadius: 999,
+    backgroundColor: '#edf3f9',
   },
-  icon: {
-    fontSize: 20,
+  label: {
+    fontSize: 13,
+    color: palette.text,
+    fontWeight: '700',
   },
   badge: {
     position: 'absolute',

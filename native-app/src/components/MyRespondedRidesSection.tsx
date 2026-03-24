@@ -16,14 +16,14 @@ export const MyRespondedRidesSection: FC<Props> = ({ matches, onExploreRides }) 
 
   return (
     <View style={styles.card}>
-      <Text style={styles.heading}>Rides I responded to</Text>
-      <Text style={styles.subheading}>Requests and offers you've joined recently.</Text>
+      <Text style={styles.heading}>Joined by me</Text>
+      <Text style={styles.subheading}>Ride requests and offers you have responded to.</Text>
 
       {hasMatches ? (
         matches.map((match) => <MatchCard key={match.matchId} match={match} />)
       ) : (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>You haven't responded to any rides yet.</Text>
+          <Text style={styles.emptyText}>You have not joined any rides yet.</Text>
           <PrimaryButton label="Find rides" onPress={onExploreRides} variant="secondary" />
         </View>
       )}

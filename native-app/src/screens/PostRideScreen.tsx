@@ -19,14 +19,23 @@ import { UserProfile } from '@/types/user';
 import { DateTimeField } from '@/components/DateTimeField';
 import { useAlerts } from '@/hooks/useAlerts';
 import { AlertsBadgeButton } from '@/components/AlertsBadgeButton';
+import { PageHeader } from '@/components/PageHeader';
 
 interface Props {
   currentUser: UserProfile | null;
   onRequireLogin: () => void;
-  onNavigate: (key: string) => void;
+  onOpenAlerts: () => void;
+  onOpenAccount: () => void;
+  onPosted: () => void;
 }
 
-export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavigate }) => {
+export const PostRideScreen: FC<Props> = ({
+  currentUser,
+  onRequireLogin,
+  onOpenAlerts,
+  onOpenAccount,
+  onPosted,
+}) => {
   const [rideType, setRideType] = useState<'offer' | 'request'>('offer');
   const [fromText, setFromText] = useState('');
   const [toText, setToText] = useState('');
@@ -43,9 +52,18 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavig
   if (!currentUser) {
     return (
       <ScrollView contentContainerStyle={styles.content} style={styles.container}>
+        <PageHeader
+          title="Post a ride"
+          subtitle="Create a ride offer or request in a few clear steps."
+          rightAccessory={
+            <TouchableOpacity onPress={onOpenAccount} style={styles.accountButton} activeOpacity={0.82}>
+              <Text style={styles.accountButtonText}>Log In</Text>
+            </TouchableOpacity>
+          }
+        />
         <Card>
           <Text style={styles.title}>Sign in to post a ride</Text>
-          <Text style={styles.subtitle}>You need to be logged in to create ride offers or requests.</Text>
+          <Text style={styles.subtitle}>Create offers and requests once your account is signed in.</Text>
           <PrimaryButton label="Log In" onPress={onRequireLogin} />
         </Card>
       </ScrollView>
@@ -117,6 +135,7 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavig
     setPhone('');
     setWhatsapp('');
     setNotes('');
+    onPosted();
   };
 
   return (
@@ -126,16 +145,21 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavig
       keyboardVerticalOffset={80}
     >
       <ScrollView contentContainerStyle={styles.content} style={styles.container}>
-        <Card>
-          <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.title}>Post a Ride</Text>
-              <Text style={styles.subtitle}>Share available seats with the GlitchaHitch community.</Text>
+        <PageHeader
+          title="Post a ride"
+          subtitle="Start with the route and timing, then add contact details only if needed."
+          rightAccessory={
+            <View style={styles.headerActions}>
+              <AlertsBadgeButton count={unreadCount} onPress={onOpenAlerts} />
+              <TouchableOpacity onPress={onOpenAccount} style={styles.accountButton} activeOpacity={0.82}>
+                <Text style={styles.accountButtonText}>Account</Text>
+              </TouchableOpacity>
             </View>
-            <AlertsBadgeButton count={unreadCount} onPress={() => onNavigate('alerts')} />
-          </View>
-
-          <Text style={styles.label}>Type</Text>
+          }
+        />
+        <Card>
+          <Text style={styles.sectionTitle}>Ride basics</Text>
+          <Text style={styles.sectionSubtitle}>Choose what you need and where the ride starts and ends.</Text>
           <View style={styles.typeRow}>
             {(['offer', 'request'] as const).map((value) => (
               <TouchableOpacity
@@ -145,7 +169,7 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavig
                 activeOpacity={0.8}
               >
                 <Text style={[styles.typeLabel, rideType === value && styles.typeLabelActive]}>
-                  {value === 'offer' ? 'Offer a Ride' : 'Request a Ride'}
+                  {value === 'offer' ? 'Offer a ride' : 'Request a ride'}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -157,7 +181,6 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavig
             value={seats}
             onChangeText={setSeats}
           />
-
           <TextInput
             style={styles.input}
             placeholder="From (e.g. Borough Park, Brooklyn)"
@@ -170,6 +193,11 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavig
             value={toText}
             onChangeText={setToText}
           />
+        </Card>
+
+        <Card>
+          <Text style={styles.sectionTitle}>Timing</Text>
+          <Text style={styles.sectionSubtitle}>Add a time window if the ride is time-sensitive.</Text>
           <View style={styles.row}>
             <View style={styles.column}>
               <DateTimeField
@@ -188,6 +216,11 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavig
               />
             </View>
           </View>
+        </Card>
+
+        <Card>
+          <Text style={styles.sectionTitle}>Contact and notes</Text>
+          <Text style={styles.sectionSubtitle}>Add at least one contact method. Notes are optional.</Text>
           <TextInput
             style={styles.input}
             placeholder="Phone (+1 718 555 1234)"
@@ -216,7 +249,7 @@ export const PostRideScreen: FC<Props> = ({ currentUser, onRequireLogin, onNavig
           {error && <Text style={styles.error}>{error}</Text>}
           {successMessage && <Text style={styles.success}>{successMessage}</Text>}
 
-          <PrimaryButton label={loading ? 'Posting...' : 'Post Ride'} onPress={handleSubmit} />
+          <PrimaryButton label={loading ? 'Posting...' : 'Post ride'} onPress={handleSubmit} />
         </Card>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -244,18 +277,21 @@ const styles = StyleSheet.create({
     color: palette.muted,
     marginBottom: spacing.md,
   },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: palette.text,
+  },
+  sectionSubtitle: {
+    color: palette.muted,
+    marginBottom: spacing.md,
+  },
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
   column: {
     flex: 1,
-  },
-  label: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    color: palette.muted,
-    marginBottom: 4,
   },
   typeRow: {
     flexDirection: 'row',
@@ -308,11 +344,19 @@ const styles = StyleSheet.create({
     color: palette.muted,
     marginBottom: spacing.sm,
   },
-  headerRow: {
+  headerActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.md,
+  },
+  accountButton: {
+    backgroundColor: '#edf3f9',
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  accountButtonText: {
+    color: palette.text,
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

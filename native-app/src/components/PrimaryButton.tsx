@@ -18,13 +18,15 @@ export const PrimaryButton: FC<Props> = ({
   accessory,
   style,
 }) => {
+  const isSecondary = variant === 'secondary';
+
   return (
     <TouchableOpacity
-      style={[styles.button, variant === 'secondary' && styles.secondary, style]}
+      style={[styles.button, isSecondary && styles.secondary, style]}
       onPress={onPress}
       activeOpacity={0.85}
     >
-      <Text style={styles.text}>{label}</Text>
+      <Text style={[styles.text, isSecondary && styles.secondaryText]}>{label}</Text>
       {accessory}
     </TouchableOpacity>
   );
@@ -36,15 +38,21 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: palette.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   secondary: {
-    backgroundColor: palette.primaryDark,
+    backgroundColor: '#ffffff',
+    borderColor: '#d6dee7',
   },
   text: {
     color: '#fff',
     fontWeight: '600',
+  },
+  secondaryText: {
+    color: palette.text,
   },
 });
