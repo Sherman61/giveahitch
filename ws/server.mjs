@@ -51,6 +51,63 @@ const io = new SocketIOServer(server, {
   allowEIO3: false,
 });
 
+const socketsByUserId = new Map();
+
+function onlineUserIds() {
+  return Array.from(socketsByUserId.entries())
+    .filter(([, sockets]) => sockets && sockets.size > 0)
+    .map(([userId]) => Number(userId))
+    .filter((userId) => Number.isFinite(userId) && userId > 0);
+}
+
+function broadcastPresence(userId, online) {
+  const normalizedUserId = Number(userId);
+  if (!Number.isFinite(normalizedUserId) || normalizedUserId <= 0) return;
+  io.emit('dm:presence', {
+    user_id: normalizedUserId,
+    online: !!online,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+function registerAuthenticatedSocket(socket, userId) {
+  const normalizedUserId = Number(userId);
+  if (!Number.isFinite(normalizedUserId) || normalizedUserId <= 0) return false;
+  const previousUserId = Number(socket.data.userId || 0);
+  if (previousUserId && previousUserId !== normalizedUserId) {
+    unregisterAuthenticatedSocket(socket);
+  }
+
+  let sockets = socketsByUserId.get(normalizedUserId);
+  const wasOffline = !sockets || sockets.size === 0;
+  if (!sockets) {
+    sockets = new Set();
+    socketsByUserId.set(normalizedUserId, sockets);
+  }
+  sockets.add(socket.id);
+  socket.data.userId = normalizedUserId;
+  socket.join(`user:${normalizedUserId}`);
+
+  if (wasOffline) {
+    broadcastPresence(normalizedUserId, true);
+  }
+  return true;
+}
+
+function unregisterAuthenticatedSocket(socket) {
+  const userId = Number(socket.data.userId || 0);
+  if (!Number.isFinite(userId) || userId <= 0) return;
+
+  const sockets = socketsByUserId.get(userId);
+  if (!sockets) return;
+
+  sockets.delete(socket.id);
+  if (sockets.size === 0) {
+    socketsByUserId.delete(userId);
+    broadcastPresence(userId, false);
+  }
+}
+
 function verifyToken(token) {
   if (!token || typeof token !== 'string' || !SECRET) return null;
   let decoded;
@@ -91,9 +148,12 @@ io.on('connection', (socket) => {
       respond({ ok: false });
       return;
     }
-    socket.data.userId = info.userId;
-    socket.join(`user:${info.userId}`);
-    respond({ ok: true, userId: info.userId });
+    registerAuthenticatedSocket(socket, info.userId);
+    respond({
+      ok: true,
+      userId: info.userId,
+      online_user_ids: onlineUserIds(),
+    });
   });
 
   socket.on('dm:typing', (payload = {}) => {
@@ -113,6 +173,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
+    unregisterAuthenticatedSocket(socket);
     console.log(`[io] disconnect ${socket.id} (${reason})`);
   });
 });
