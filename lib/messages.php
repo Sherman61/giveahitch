@@ -184,6 +184,80 @@ function mark_thread_read(PDO $pdo, array $thread, int $userId): array
     ];
 }
 
+function mark_messages_read(PDO $pdo, array $thread, int $userId, array $messageIds): array
+{
+    $threadId = (int)($thread['id'] ?? 0);
+    if ($threadId <= 0) {
+        return ['messages' => [], 'message_ids' => []];
+    }
+
+    $ids = array_values(array_unique(array_map(static fn ($value): int => (int)$value, $messageIds)));
+    $ids = array_values(array_filter($ids, static fn (int $id): bool => $id > 0));
+    if (!$ids) {
+        return ['messages' => [], 'message_ids' => []];
+    }
+
+    $idPlaceholders = implode(',', array_fill(0, count($ids), '?'));
+    $selectSql = sprintf(
+        'SELECT id FROM user_messages
+         WHERE thread_id = ?
+           AND sender_user_id <> ?
+           AND read_at IS NULL
+           AND id IN (%s)',
+        $idPlaceholders
+    );
+    $select = $pdo->prepare($selectSql);
+    $paramIndex = 1;
+    $select->bindValue($paramIndex++, $threadId, PDO::PARAM_INT);
+    $select->bindValue($paramIndex++, $userId, PDO::PARAM_INT);
+    foreach ($ids as $id) {
+        $select->bindValue($paramIndex++, $id, PDO::PARAM_INT);
+    }
+    $select->execute();
+
+    $pendingIds = array_map(static fn ($value): int => (int)$value, $select->fetchAll(PDO::FETCH_COLUMN));
+    if (!$pendingIds) {
+        return ['messages' => [], 'message_ids' => []];
+    }
+
+    $pendingPlaceholders = implode(',', array_fill(0, count($pendingIds), '?'));
+    $updateSql = sprintf('UPDATE user_messages SET read_at = NOW() WHERE id IN (%s)', $pendingPlaceholders);
+    $update = $pdo->prepare($updateSql);
+    foreach ($pendingIds as $index => $id) {
+        $update->bindValue($index + 1, $id, PDO::PARAM_INT);
+    }
+    $update->execute();
+
+    $fetchSql = sprintf('SELECT id, read_at FROM user_messages WHERE id IN (%s)', $pendingPlaceholders);
+    $fetch = $pdo->prepare($fetchSql);
+    foreach ($pendingIds as $index => $id) {
+        $fetch->bindValue($index + 1, $id, PDO::PARAM_INT);
+    }
+    $fetch->execute();
+
+    $rows = $fetch->fetchAll(PDO::FETCH_ASSOC);
+    $messages = array_map(static fn (array $row): array => [
+        'id' => (int)$row['id'],
+        'read_at' => $row['read_at'],
+    ], $rows);
+
+    $col = null;
+    if ((int)$thread['user_a_id'] === $userId) {
+        $col = 'user_a_unread';
+    } elseif ((int)$thread['user_b_id'] === $userId) {
+        $col = 'user_b_unread';
+    }
+    if ($col) {
+        $pdo->prepare("UPDATE user_message_threads SET {$col} = 0 WHERE id = :id")
+            ->execute([':id' => $threadId]);
+    }
+
+    return [
+        'messages' => $messages,
+        'message_ids' => array_map(static fn (array $row): int => (int)$row['id'], $messages),
+    ];
+}
+
 function list_threads(PDO $pdo, int $userId): array
 {
     $sql = 'SELECT t.*, other.id   AS other_user_id,

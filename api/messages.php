@@ -149,6 +149,64 @@ if ($method === 'GET') {
 
 if ($method === 'POST') {
     $input = assert_csrf_and_get_input();
+    $action = isset($input['action']) ? (string)$input['action'] : '';
+
+    if ($action === 'typing') {
+        $recipientId = (int)($input['recipient_id'] ?? $input['user_id'] ?? 0);
+        if ($recipientId <= 0 || $recipientId === $uid) {
+            send_json(200, ['ok' => true]);
+        }
+
+        \App\WS\broadcast('dm:typing', [
+            'sender_id' => $uid,
+            'recipient_id' => $recipientId,
+            'thread_id' => null,
+            'typing' => (bool)($input['is_typing'] ?? $input['typing'] ?? false),
+            'timestamp' => gmdate('c'),
+        ], [
+            'user:' . $recipientId,
+        ]);
+
+        send_json(200, ['ok' => true]);
+    }
+
+    if ($action === 'mark_read') {
+        $otherId = (int)($input['other_user_id'] ?? $input['user_id'] ?? 0);
+        $rawMessageIds = $input['message_ids'] ?? [];
+        $messageIds = is_array($rawMessageIds)
+            ? array_values(array_filter(array_map(static fn ($id): int => (int)$id, $rawMessageIds), static fn (int $id): bool => $id > 0))
+            : [];
+
+        if ($otherId <= 0 || !$messageIds) {
+            send_json(200, ['ok' => true]);
+        }
+
+        $thread = \App\Messages\find_thread($pdo, $uid, $otherId);
+        if (!$thread) {
+            send_json(200, ['ok' => true, 'messages' => []]);
+        }
+
+        $readInfo = \App\Messages\mark_messages_read($pdo, $thread, $uid, $messageIds);
+        if (!empty($readInfo['message_ids'])) {
+            \App\WS\broadcast('dm:read', [
+                'thread_id' => (int)$thread['id'],
+                'reader_id' => $uid,
+                'recipient_id' => $otherId,
+                'message_ids' => $readInfo['message_ids'],
+                'messages' => $readInfo['messages'],
+            ], [
+                'user:' . $uid,
+                'user:' . $otherId,
+            ]);
+        }
+
+        send_json(200, [
+            'ok' => true,
+            'messages' => $readInfo['messages'] ?? [],
+            'message_ids' => $readInfo['message_ids'] ?? [],
+        ]);
+    }
+
     $recipientId = (int)($input['recipient_id'] ?? $input['user_id'] ?? 0);
     $body = (string)($input['body'] ?? '');
     $clientRef = isset($input['client_ref']) ? (string)$input['client_ref'] : null;
