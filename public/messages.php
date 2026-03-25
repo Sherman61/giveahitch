@@ -23,10 +23,20 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
       background: linear-gradient(180deg, #f8faff 0%, #eef2ff 100%);
     }
     .chat-layout {
-      min-height: calc(100vh - 140px);
+      min-height: 0;
+    }
+    .chat-shell {
+      height: min(78vh, 760px);
+      max-height: calc(100vh - 150px);
+      min-height: 540px;
+    }
+    .pane-card {
+      height: 100%;
     }
     .conversation-list {
-      max-height: calc(100vh - 220px);
+      max-height: none;
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
     }
     .conversation-item {
@@ -40,7 +50,7 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
       background-color: rgba(13, 110, 253, 0.08);
     }
     .chat-card {
-      min-height: calc(100vh - 220px);
+      min-height: 0;
     }
     .messages-area {
       background: #f7f9fc;
@@ -48,6 +58,7 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
       padding: 1rem;
       overflow-y: auto;
       flex: 1;
+      min-height: 0;
     }
     .message-row {
       display: flex;
@@ -178,6 +189,19 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
       text-align: center;
       margin-top: 3rem;
     }
+    @media (max-width: 991.98px) {
+      .chat-shell {
+        height: calc(100vh - 130px);
+        max-height: calc(100vh - 130px);
+        min-height: 0;
+      }
+      body.messages-mobile-chat-active #threadsPane {
+        display: none;
+      }
+      body:not(.messages-mobile-chat-active) #chatPane {
+        display: none;
+      }
+    }
   </style>
   <script>
     window.ME_USER_ID = <?= (int)$me['id'] ?>;
@@ -191,9 +215,9 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
 <body>
 <?php include __DIR__ . '/header.php'; ?>
 <div class="container py-4 chat-layout">
-  <div class="row g-4">
-    <div class="col-lg-4">
-      <div class="card shadow-sm h-100">
+  <div class="row g-4 chat-shell">
+    <div class="col-lg-4 h-100" id="threadsPane">
+      <div class="card shadow-sm pane-card">
         <div class="card-body d-flex flex-column">
           <div class="d-flex align-items-center justify-content-between mb-3">
             <h1 class="h5 mb-0">Conversations</h1>
@@ -204,8 +228,8 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
         </div>
       </div>
     </div>
-    <div class="col-lg-8">
-      <div class="card shadow-sm chat-card h-100">
+    <div class="col-lg-8 h-100" id="chatPane">
+      <div class="card shadow-sm chat-card pane-card">
         <div class="card-body d-flex flex-column">
           <div id="chatHeader" class="mb-3">
             <h2 class="h5 mb-0">Select a conversation</h2>

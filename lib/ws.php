@@ -5,8 +5,22 @@ namespace App\WS;
 
 use RuntimeException;
 
+require_once __DIR__ . '/../vendor/autoload.php';
+
+function ensure_env_loaded(): void
+{
+    if (defined('APP_ENV_LOADED')) {
+        return;
+    }
+    if (class_exists(\Dotenv\Dotenv::class)) {
+        \Dotenv\Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
+    }
+    define('APP_ENV_LOADED', true);
+}
+
 function env(string $name): ?string
 {
+    ensure_env_loaded();
     $value = $_ENV[$name] ?? getenv($name);
     if ($value === false || $value === null || $value === '') {
         return null;

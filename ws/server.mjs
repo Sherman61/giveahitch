@@ -30,7 +30,11 @@ const WS_PORT    = getEnvInt('WS_PORT', 4001);
 const HK_HOST    = getEnv('WS_HOOK_HOST', '127.0.0.1');
 const HK_PORT    = getEnvInt('WS_HOOK_PORT', 4002);
 
-const SECRET     = getEnv('WS_BROADCAST_SECRET', 'super-long--string-here123!!@#$%^&');
+const SECRET     = getEnv('WS_BROADCAST_SECRET');
+
+if (!SECRET) {
+  console.error('[ws] WS_BROADCAST_SECRET is missing. Set it in the ws runtime env.');
+}
 
 // ---------- Socket.IO HTTP server ----------
 const app = express();

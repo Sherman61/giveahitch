@@ -43,6 +43,7 @@ const state = {
   fetchingConversation: new Set(),
   deleteExpiryTimers: new Map(),
   clearingConversation: false,
+  mobileChatViewActive: false,
 };
 
 const isSocketReady = () => !!(state.socket && state.socket.connected && state.socketAuthed);
@@ -94,6 +95,11 @@ const showMessageAlert = (text) => {
   if (!messageAlert) return;
   messageAlert.classList.remove('d-none');
   messageAlert.textContent = text;
+};
+
+const setMobileChatView = (active) => {
+  state.mobileChatViewActive = !!active;
+  document.body.classList.toggle('messages-mobile-chat-active', state.mobileChatViewActive);
 };
 
 const scrollMessagesToBottom = () => {
@@ -579,6 +585,11 @@ const renderConversationHeader = () => {
   const isOnline = !!(showPresence && other?.id && isUserOnline(other.id));
   const presenceText = showPresence ? (isOnline ? 'Online now' : 'Offline') : '';
   const controls = [];
+  controls.push(`
+    <button type="button" class="btn btn-outline-secondary btn-sm d-lg-none" id="mobileBackToThreadsBtn">
+      <i class="bi bi-arrow-left"></i>
+      <span class="ms-1">Back</span>
+    </button>`);
   const hasThread = !!state.activeThreadId || state.messages.length > 0;
   if (hasThread) {
     controls.push(`
@@ -907,6 +918,7 @@ const handleThreadClick = (event) => {
   if (!button) return;
   const userId = Number(button.dataset.userId || 0);
   if (!userId) return;
+  setMobileChatView(true);
   fetchConversation(userId);
 };
 
@@ -1226,15 +1238,24 @@ if (messagesList) {
 
 document.addEventListener('click', (event) => {
   const clearBtn = event.target.closest('#clearConversationBtn');
-  if (!clearBtn) return;
-  event.preventDefault();
-  clearMyMessages();
+  if (clearBtn) {
+    event.preventDefault();
+    clearMyMessages();
+    return;
+  }
+  const backBtn = event.target.closest('#mobileBackToThreadsBtn');
+  if (backBtn) {
+    event.preventDefault();
+    setMobileChatView(false);
+  }
 });
 
 const init = async () => {
+  setMobileChatView(false);
   await fetchThreads({ keepSelection: true });
   if (state.activeUserId) {
     await fetchConversation(state.activeUserId);
+    setMobileChatView(true);
   } else {
     renderConversationHeader();
     updateComposerState();
