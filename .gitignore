@@ -6,3 +6,4 @@
 /ws/node_modules
 # Ignore Socket.IO workspace deps
 ws/node_modules/
+/native-app/node_modules/
