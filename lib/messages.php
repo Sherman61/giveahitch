@@ -297,6 +297,9 @@ function format_thread_row(array $row, int $viewerId): array
             'id' => (int)($row['other_user_id'] ?? $otherId),
             'display_name' => $row['other_display_name'] ?? $row['display_name'] ?? '',
             'username' => $row['other_username'] ?? null,
+            'is_online' => array_key_exists('other_is_online', $row)
+                ? (bool)$row['other_is_online']
+                : (array_key_exists('is_online', $row) ? (bool)$row['is_online'] : null),
             'message_privacy' => isset($row['other_message_privacy']) ? (int)$row['other_message_privacy'] : null,
         ],
         'created_at' => $row['created_at'] ?? null,

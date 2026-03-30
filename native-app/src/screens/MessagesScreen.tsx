@@ -273,8 +273,29 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
     if (typingByUserId[activeUserId]) {
       return 'Typing...';
     }
-    return presenceByUserId[activeUserId] ? 'Online' : 'Offline';
+    const activePresence = presenceByUserId[activeUserId];
+    if (typeof activePresence === 'boolean') {
+      return activePresence ? 'Online' : 'Offline';
+    }
+    if (connectionState === 'connected') {
+      return 'Unknown';
+    }
+    return 'Realtime offline';
   }, [activeUserId, connectionState, presenceByUserId, typingByUserId]);
+
+  const resolvePresence = useCallback(
+    (otherUserId: number, fallbackPresence?: boolean | null): boolean | null => {
+      const livePresence = presenceByUserId[otherUserId];
+      if (typeof livePresence === 'boolean') {
+        return livePresence;
+      }
+      if (connectionState === 'connected') {
+        return null;
+      }
+      return typeof fallbackPresence === 'boolean' ? fallbackPresence : null;
+    },
+    [connectionState, presenceByUserId],
+  );
 
   const renderReceipt = useCallback((message: Message) => {
     if (message.senderId !== userId) {
@@ -423,12 +444,13 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
               <Text style={styles.empty}>No conversations yet. Start by messaging a ride match.</Text>
             )}
             {threads.map((thread) => {
-              const isOnline = presenceByUserId[thread.otherUser.id] ?? thread.otherUser.isOnline ?? false;
+              const isOnline = resolvePresence(thread.otherUser.id, thread.otherUser.isOnline);
+              const statusText = isOnline === null ? 'Unknown' : isOnline ? 'Online' : 'Offline';
               return (
                 <TouchableOpacity key={thread.id} style={styles.threadRow} onPress={() => openConversation(thread.otherUser.id)}>
                   <View style={styles.threadText}>
                     <Text style={styles.threadName}>{thread.otherUser.displayName ?? thread.otherUser.username ?? 'Member'}</Text>
-                    <Text style={styles.threadStatus}>{isOnline ? 'Online' : 'Offline'}</Text>
+                    <Text style={styles.threadStatus}>{statusText}</Text>
                     <Text style={styles.threadPreview}>
                       {thread.lastMessage?.body ? thread.lastMessage.body.slice(0, 80) : 'No messages yet.'}
                     </Text>
@@ -701,5 +723,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-
 
