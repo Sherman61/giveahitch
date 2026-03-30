@@ -5,7 +5,9 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/scoring.php';
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Scoring\{award, rating_bonus_for};
 
 start_secure_session();
 require_login();
@@ -76,6 +78,21 @@ if ($ratedRole === 'driver') {
         ->execute([':r'=>$rating, ':u'=>$ratee]);
 }
 
+$bonus = rating_bonus_for($rating);
+award($pdo, $ratee, $bonus, 'perfect_rating_received', [
+    'ride_id' => (int)$m['ride_id'],
+    'match_id' => (int)$m['id'],
+    'actor_user_id' => (int)$me['id'],
+    'details' => $ratedRole === 'driver'
+        ? 'You received a 5-star driver rating.'
+        : 'You received a 5-star rider rating.',
+    'metadata' => [
+        'stars' => $rating,
+        'rated_role' => $ratedRole,
+        'rater_role' => $raterRole,
+    ],
+]);
+
 $pdo->commit();
-echo json_encode(['ok'=>true]);
+echo json_encode(['ok'=>true, 'bonus'=>$bonus]);
 ?>

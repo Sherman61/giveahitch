@@ -6,8 +6,11 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/status.php';
-
+require_once __DIR__ . '/../lib/scoring.php';
+require_once __DIR__ . '/../lib/rides.php';
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Rides\broadcast_ride_update;
+use function App\Scoring\{award_many, points_for};
 use function App\Status\{from_db, to_db};
 
 start_secure_session();
@@ -61,15 +64,15 @@ try {
         exit;
     }
 
-    // Lock chosen match
-    $mq = $pdo->prepare("
+    // Lock the chosen pending join request.
+    $matchStmt = $pdo->prepare("
         SELECT id, ride_id, driver_user_id, passenger_user_id, status
         FROM ride_matches
         WHERE id = :mid AND ride_id = :rid
         FOR UPDATE
     ");
-    $mq->execute([':mid'=>$matchId, ':rid'=>$rideId]);
-    $match = $mq->fetch(PDO::FETCH_ASSOC);
+    $matchStmt->execute([':mid'=>$matchId, ':rid'=>$rideId]);
+    $match = $matchStmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$match) {
         $pdo->rollBack();
@@ -85,21 +88,21 @@ try {
         exit;
     }
 
-    // Accept chosen match
+    // Confirm the chosen match.
     $pdo->prepare("
         UPDATE ride_matches
         SET status = :status, confirmed_at = NOW()
         WHERE id = :mid
     ")->execute([':status'=>to_db('confirmed'), ':mid'=>$matchId]);
 
-    // Reject all other pending matches for this ride
+    // Reject the other pending join requests for this ride.
     $pdo->prepare("
         UPDATE ride_matches
         SET status = :status
         WHERE ride_id = :rid AND status = :pending AND id <> :mid
     ")->execute([':status'=>to_db('rejected'), ':pending'=>to_db('pending'), ':rid'=>$rideId, ':mid'=>$matchId]);
 
-    // Update ride status and (if exists) confirmed_match_id
+    // Update the ride to point at the confirmed match.
     try {
         $pdo->prepare("
             UPDATE rides
@@ -116,23 +119,31 @@ try {
         }
     }
 
-    // ===== NEW: bump both users' scores by +100 on confirm =====
     $driverId    = (int)$match['driver_user_id'];
     $passengerId = (int)$match['passenger_user_id'];
 
-    // Both participants get +100
-    $bump = $pdo->prepare("UPDATE users SET score = score + 100 WHERE id IN (:a, :b)");
-    $bump->execute([':a'=>$driverId, ':b'=>$passengerId]);
+    $scoreDelta = points_for('match_confirmed');
+    award_many($pdo, [$driverId, $passengerId], $scoreDelta, 'match_confirmed', [
+        'ride_id' => $rideId,
+        'match_id' => $matchId,
+        'actor_user_id' => $uid,
+        'details' => 'Ride owner confirmed this match.',
+        'metadata' => [
+            'driver_user_id' => $driverId,
+            'passenger_user_id' => $passengerId,
+        ],
+    ]);
 
     $pdo->commit();
+    broadcast_ride_update($rideId, [(int)$ride['user_id'], $driverId, $passengerId], 'match_confirmed');
 
     echo json_encode([
         'ok'     => true,
         'status' => 'confirmed',
         'ride'   => ['id'=>(int)$rideId, 'status'=>'matched'],
         'match'  => ['id'=>(int)$matchId, 'status'=>'confirmed'],
-        'bumped_users' => [$driverId, $passengerId],
-        'score_delta'  => 100
+        'bumped_users' => array_values(array_unique([$driverId, $passengerId])),
+        'score_delta'  => $scoreDelta
     ]);
 } catch (\Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();

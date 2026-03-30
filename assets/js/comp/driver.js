@@ -1,9 +1,12 @@
 import { logError } from '../utils/logger.js';
+import {
+  esc,
+  formatDateTime,
+  formatPostedTime,
+  joinedTripLabel,
+} from './ride-ui.js';
 
 // /assets/js/components/driver.js
-const esc = s => s ? String(s).replace(/[&<>"']/g, m => (
-  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]
-)) : '';
 
 const badge = status => {
   const map = {pending:'warning',accepted:'primary',matched:'primary',confirmed:'primary',in_progress:'info',completed:'success',rejected:'dark',cancelled:'dark'};
@@ -53,29 +56,27 @@ const contactHtml = (phone, whatsapp) => {
 
 function respondedScenario(m, amDriver, otherName){
   const status = m.match_status;
-  let heading = amDriver ? 'You offered to drive' : 'You asked for a ride';
+  let heading = amDriver ? 'You are the driver for this trip' : 'You are the rider for this trip';
   let detail = '';
   let cta = '';
 
   if (status === 'pending') {
     detail = amDriver
-      ? `${otherName} still needs to accept your offer.`
-      : `${otherName} is reviewing your request.`;
+      ? `${otherName} still needs to accept your offer to drive.`
+      : `${otherName} is reviewing your request to join this ride.`;
     cta = 'You can withdraw if your plans changed.';
   } else if (status === 'accepted') {
     detail = amDriver
-      ? `${otherName} accepted your offer. The ride owner will confirm once everything is set.`
-      : `You're accepted by ${otherName}. Watch for confirmation from the ride owner.`;
+      ? `${otherName} accepted your offer to drive. The ride owner will confirm once everything is set.`
+      : `${otherName} accepted you. Watch for final confirmation before you head out.`;
   } else if (status === 'matched' || status === 'confirmed') {
     detail = amDriver
-      ? `You're confirmed to drive ${otherName}. Coordinate timing and start the trip together.`
+      ? `You're confirmed to drive ${otherName}. Coordinate timing and pickup details together.`
       : `${otherName} is confirmed to drive you. Coordinate meetup details before departure.`;
-    cta = 'Mark the ride complete once the trip wraps up.';
   } else if (status === 'in_progress') {
     detail = amDriver
       ? `You're currently driving ${otherName}.`
       : `${otherName} is currently driving you.`;
-    cta = 'Complete the ride when the trip ends.';
   } else if (status === 'completed') {
     detail = amDriver
       ? `Trip finished with ${otherName}.`
@@ -107,7 +108,8 @@ async function postJSON(url, body){
 }
 
 function cardForResponded(m, onRefresh){
-  const dt = m.ride_datetime ? new Date(m.ride_datetime.replace(' ','T')+'Z').toLocaleString() : 'Any time';
+  const dt = formatDateTime(m.ride_datetime);
+  const postedAt = formatPostedTime(m.ride_created_at);
   const meId   = Number(window.MY_ID || 0);
   const meName = (window.ME_NAME && String(window.ME_NAME).trim()) || 'You';
 
@@ -138,7 +140,8 @@ function cardForResponded(m, onRefresh){
     <div class="card-body">
       <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
         <div class="me-md-3 flex-grow-1">
-          <div class="fw-semibold">${m.type==='offer' ? '🚗 Offer' : '🙋 Request'} — ${esc(m.from_text)} → ${esc(m.to_text)}</div>
+          <div class="fw-semibold">${esc(joinedTripLabel(m.type))} — ${esc(m.from_text)} → ${esc(m.to_text)}</div>
+          <div class="text-secondary small mt-1">${esc(postedAt)}</div>
           <div class="border rounded-3 bg-body-tertiary p-3 mt-3">
             <div class="fw-semibold text-primary">${esc(scenario.heading)}</div>
             <div class="text-secondary small mt-1">${scenario.detail}</div>
@@ -173,32 +176,17 @@ function cardForResponded(m, onRefresh){
     actions.appendChild(w);
   }
 
-  // Accepted / matched / in_progress → you can mark complete too (both parties can do it)
-  if (['accepted','matched','confirmed','in_progress'].includes(m.match_status)){
-    const c = document.createElement('button');
-    c.className='btn btn-sm btn-primary';
-    c.textContent='Complete';
-    c.addEventListener('click', async ()=>{
-      try{
-        await postJSON(`${window.API_BASE}/ride_set_status.php`, { ride_id: m.ride_id, status:'completed' });
-        onRefresh?.();
-      }
-      catch(e){ handleActionError('driver:complete_failed', e, 'Failed to mark the ride complete.', { rideId: m.ride_id }); }
-    });
-    actions.appendChild(c);
-  }
-
   // Completed → rate the other party (driver rates passenger; passenger rates driver)
   if (m.match_status === 'completed' && !m.already_rated){
     const r = document.createElement('button');
     r.className='btn btn-sm btn-warning';
-    r.textContent = amDriver ? 'Rate passenger' : 'Rate driver';
+    r.textContent = amDriver ? 'Rate rider' : 'Rate driver';
     r.addEventListener('click', ()=>{
       const form = document.createElement('form');
       form.className = 'rating-form border rounded-3 bg-body-tertiary p-3 text-start mt-2';
       form.innerHTML = `
         <div class="mb-2">
-          <label class="form-label small fw-semibold">Rate this ${amDriver ? 'passenger' : 'driver'}</label>
+          <label class="form-label small fw-semibold">Rate this ${amDriver ? 'rider' : 'driver'}</label>
           <div class="btn-group" role="group" aria-label="Rating">
             ${[1,2,3,4,5].map(n => `
               <input type="radio" class="btn-check" name="stars" id="rate-${m.match_id}-${n}" value="${n}" ${n===5?'checked':''}>
@@ -255,8 +243,8 @@ function cardForResponded(m, onRefresh){
 
 async function render(el){
   el.innerHTML = `
-    <h1 class="h4 mb-2">I responded</h1>
-    <p class="text-secondary small mb-4">These are rides where you joined as a driver or passenger. Track your active trips, follow up on pending matches, and rate your partner once a ride is completed.</p>
+    <h1 class="h4 mb-2">Trips you joined</h1>
+    <p class="text-secondary small mb-4">These are rides you joined as a driver or rider. Active trips stay visible, and inactive ones move into Past rides until they age out.</p>
     <section class="mb-4">
       <h2 class="h6 text-success d-flex align-items-center gap-2">Active trips</h2>
       <p class="text-secondary small mb-2">Use these actions to coordinate with your match and wrap up the ride when it ends.</p>
@@ -267,17 +255,19 @@ async function render(el){
       <p class="text-secondary small mb-2">Waiting on the ride owner? You can withdraw here if your plans changed.</p>
       <div id="pendingList" class="vstack gap-3"></div>
     </section>
-    <section class="mb-4">
-      <h2 class="h6 text-primary d-flex align-items-center gap-2">Completed (rate your partner)</h2>
-      <p class="text-secondary small mb-2">Rate the other rider to keep the community trustworthy.</p>
-      <div id="completedList" class="vstack gap-3"></div>
-    </section>
+    <details class="mb-4" id="pastRidesWrap">
+      <summary class="h6 text-secondary mb-3" id="pastRidesSummary">Past rides</summary>
+      <p class="text-secondary small mb-2">Completed, cancelled, and rejected matches stay here until they age out.</p>
+      <div id="pastRidesList" class="vstack gap-3"></div>
+    </details>
     <div id="msg" class="d-none alert mt-3"></div>
   `;
 
   const accWrap = el.querySelector('#acceptedList');
   const penWrap = el.querySelector('#pendingList');
-  const compWrap = el.querySelector('#completedList');
+  const pastWrap = el.querySelector('#pastRidesList');
+  const pastShell = el.querySelector('#pastRidesWrap');
+  const pastSummary = el.querySelector('#pastRidesSummary');
   const msg     = el.querySelector('#msg');
 
   let data;
@@ -308,7 +298,7 @@ async function render(el){
 
   const pending   = data.items.filter(m => m.match_status === 'pending');
   const active    = data.items.filter(m => ['accepted','matched','confirmed','in_progress'].includes(m.match_status));
-  const completed = data.items.filter(m => m.match_status === 'completed');
+  const past      = data.items.filter(m => ['completed','cancelled','rejected'].includes(m.match_status));
 
   const refresh = () => render(el);
 
@@ -318,8 +308,15 @@ async function render(el){
   if (!pending.length)  penWrap.innerHTML = `<div class="alert alert-info">No pending matches.</div>`;
   else { penWrap.innerHTML='';  pending.forEach(m  => penWrap.appendChild(cardForResponded(m, refresh))); }
 
-  if (!completed.length) compWrap.innerHTML = `<div class="alert alert-secondary">No completed rides yet.</div>`;
-  else { compWrap.innerHTML=''; completed.forEach(m => compWrap.appendChild(cardForResponded(m, refresh))); }
+  if (!past.length) {
+    pastShell.hidden = true;
+    pastWrap.innerHTML = '';
+  } else {
+    pastShell.hidden = false;
+    pastSummary.textContent = `Past rides (${past.length})`;
+    pastWrap.innerHTML='';
+    past.forEach(m => pastWrap.appendChild(cardForResponded(m, refresh)));
+  }
 }
 
 export function mountDriver(el){

@@ -5,8 +5,10 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/scoring.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Scoring\{award, rating_bonus_for};
 
 start_secure_session();
 require_login();
@@ -84,14 +86,21 @@ try {
         WHERE id = :driver
     ")->execute([':s'=>$stars, ':driver'=>$m['driver_user_id']]);
 
-    // Bonus score +50 for a perfect 5★
-    if ($stars === 5) {
-        $pdo->prepare("UPDATE users SET score = score + 50 WHERE id = :driver")
-            ->execute([':driver'=>$m['driver_user_id']]);
-    }
+    $bonus = rating_bonus_for($stars);
+    award($pdo, (int)$m['driver_user_id'], $bonus, 'perfect_rating_received', [
+        'ride_id' => $rideId,
+        'match_id' => $matchId,
+        'actor_user_id' => $uid,
+        'details' => 'You received a 5-star driver rating.',
+        'metadata' => [
+            'stars' => $stars,
+            'rated_role' => 'driver',
+            'rater_role' => 'passenger',
+        ],
+    ]);
 
     $pdo->commit();
-    echo json_encode(['ok'=>true,'rating'=>$stars, 'driver_id'=>(int)$m['driver_user_id']]);
+    echo json_encode(['ok'=>true,'rating'=>$stars, 'driver_id'=>(int)$m['driver_user_id'], 'bonus'=>$bonus]);
 } catch (\Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     http_response_code(500);

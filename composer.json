@@ -4,7 +4,8 @@
     "respect/validation": "^2.3",
     "minishlink/web-push": "^9.0",
     "symfony/mailer": "^7.3",
-    "symfony/http-client": "^7.3"
+    "symfony/http-client": "^7.3",
+    "erusev/parsedown": "^1.8"
   },
   "autoload": {
     "psr-4": {

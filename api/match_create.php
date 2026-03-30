@@ -6,8 +6,10 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/notifications.php';
+require_once __DIR__ . '/../lib/rides.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Rides\{map_joiner_roles, summarize_route};
 
 start_secure_session();
 require_login();
@@ -30,14 +32,7 @@ $me = current_user();
 $meId = (int)$me['id'];
 if ($meId === (int)$ride['user_id']) { $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'own_ride']); exit; }
 
-/* Map roles: offer => owner is driver; request => owner is passenger */
-if ($ride['type'] === 'offer') {           // owner is driver, me is passenger
-    $driver = (int)$ride['user_id'];
-    $pass   = $meId;
-} else {                                    // 'request' => owner is passenger, me is driver
-    $driver = $meId;
-    $pass   = (int)$ride['user_id'];
-}
+$roleMap = map_joiner_roles($ride, $meId);
 
 /* Insert PENDING; unique index prevents duplicates from same pair */
 $ins = $pdo->prepare("
@@ -45,7 +40,11 @@ $ins = $pdo->prepare("
   VALUES(:rid,:d,:p,'pending')
 ");
 try {
-  $ins->execute([':rid'=>$rideId, ':d'=>$driver, ':p'=>$pass]);
+  $ins->execute([
+    ':rid'=>$rideId,
+    ':d'=>$roleMap['driver_user_id'],
+    ':p'=>$roleMap['passenger_user_id'],
+  ]);
   $matchId = (int)$pdo->lastInsertId();
 } catch (\PDOException $e) {
   // duplicate or other error
@@ -60,9 +59,7 @@ $pdo->commit();
 
 try {
     $actorName = trim((string)($me['display_name'] ?? ''));
-    $from = trim((string)($ride['from_text'] ?? ''));
-    $to   = trim((string)($ride['to_text'] ?? ''));
-    $summary = $from && $to ? "$from → $to" : ($from ?: $to ?: 'your ride');
+    $summary = summarize_route($ride);
     $title = 'New request for your ride';
     $body  = ($actorName !== '' ? $actorName : 'A member') . " asked to join $summary.";
     \App\Notifications\notify_ride_owner($pdo, $ride, $me, 'ride_match_requested', $title, $body, [

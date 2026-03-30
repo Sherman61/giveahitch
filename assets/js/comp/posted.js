@@ -1,9 +1,14 @@
 import { logError } from '../utils/logger.js';
+import {
+  esc,
+  formatDateTime,
+  formatPostedTime,
+  responderRoleLabel,
+  rideCounterpartyLabel,
+  rideTypeLabel,
+} from './ride-ui.js';
 
 // /assets/js/components/posted.js
-const esc = s => s ? String(s).replace(/[&<>"']/g, m => (
-  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]
-)) : '';
 
 const badge = status => {
   const map = {open:'secondary',pending:'warning',matched:'primary',confirmed:'primary',in_progress:'info',completed:'success',cancelled:'dark',rejected:'dark'};
@@ -103,15 +108,15 @@ function scenarioSummary(item){
   if (status === 'open') {
     if (type === 'offer') {
       detail = pending > 0
-        ? `${plural(pending, 'passenger request')} ${pending === 1 ? 'is' : 'are'} waiting for your response.`
-        : 'No passengers have requested this ride yet.';
+        ? `${plural(pending, 'rider')} ${pending === 1 ? 'is' : 'are'} waiting for your response.`
+        : 'No riders have asked to join this trip yet.';
       if (pending > 0) {
-        cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Review passenger requests</a>`;
+        cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Review rider requests</a>`;
       }
     } else {
       detail = pending > 0
-        ? `${plural(pending, 'driver offer')} ${pending === 1 ? 'is' : 'are'} ready for you to review.`
-        : 'No drivers have offered yet.';
+        ? `${plural(pending, 'driver')} ${pending === 1 ? 'is' : 'are'} ready for you to review.`
+        : 'No drivers have offered to pick you up yet.';
       if (pending > 0) {
         cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Review driver offers</a>`;
       }
@@ -125,7 +130,7 @@ function scenarioSummary(item){
       detail = 'You have an active match awaiting confirmation.';
     }
     if (pending > 0) {
-      detail += ` You also have ${plural(pending, type === 'offer' ? 'other passenger request' : 'other driver offer')} waiting.`;
+      detail += ` You also have ${plural(pending, `other ${rideCounterpartyLabel(type)}`)} waiting.`;
     }
     cta = `<a class="fw-semibold link-primary" href="${manageUrl}">Manage ride</a>`;
   } else if (status === 'in_progress') {
@@ -148,7 +153,7 @@ function scenarioSummary(item){
   }
 
   const countsLine = [];
-  if (pending > 0) countsLine.push(`${plural(pending, type === 'offer' ? 'passenger request' : 'driver offer')}`);
+  if (pending > 0) countsLine.push(`${plural(pending, responderRoleLabel(type))} waiting`);
   if (active > 0) countsLine.push(`${plural(active, 'active match')}`);
   if (completed > 0) countsLine.push(`${plural(completed, 'completed match')}`);
 
@@ -157,30 +162,26 @@ function scenarioSummary(item){
 
 async function load(el){
   el.innerHTML = `
-    <h1 class="h4 mb-2">I posted (offers & looking)</h1>
-    <p class="text-secondary small mb-4">Manage the rides you created. Active rides stay at the top; once a ride is finished or cancelled it moves into the history lists below.</p>
+    <h1 class="h4 mb-2">Rides you posted</h1>
+    <p class="text-secondary small mb-4">Manage rides you created. Active rides stay at the top, and older inactive rides are tucked into Past rides.</p>
     <div id="ownMsg" class="d-none alert"></div>
     <section class="mb-4">
       <h2 class="h6 text-success d-flex align-items-center gap-2">Active rides</h2>
       <p class="text-secondary small mb-2">Start trips, mark them complete, or cancel if plans change.</p>
       <div id="activeList" class="vstack gap-3"></div>
     </section>
-    <section class="mb-4">
-      <h2 class="h6 text-primary d-flex align-items-center gap-2">Completed rides</h2>
-      <p class="text-secondary small mb-2">Remember to rate the other rider when a trip wraps up.</p>
-      <div id="completedList" class="vstack gap-3"></div>
-    </section>
-    <section class="mb-4">
-      <h2 class="h6 text-secondary d-flex align-items-center gap-2">Cancelled / Rejected</h2>
-      <p class="text-secondary small mb-2">These are archived for your records.</p>
-      <div id="cancelledList" class="vstack gap-3"></div>
-    </section>
+    <details class="mb-4" id="pastRidesWrap">
+      <summary class="h6 text-secondary mb-3" id="pastRidesSummary">Past rides</summary>
+      <p class="text-secondary small mb-2">Completed, cancelled, and rejected rides stay here until they age out.</p>
+      <div id="pastRidesList" class="vstack gap-3"></div>
+    </details>
   `;
 
   const msg        = el.querySelector('#ownMsg');
   const activeWrap = el.querySelector('#activeList');
-  const doneWrap   = el.querySelector('#completedList');
-  const cancelWrap = el.querySelector('#cancelledList');
+  const pastWrap   = el.querySelector('#pastRidesList');
+  const pastShell  = el.querySelector('#pastRidesWrap');
+  const pastSummary = el.querySelector('#pastRidesSummary');
 
   let data;
   try {
@@ -203,15 +204,13 @@ async function load(el){
   const items = Array.isArray(data.items) ? data.items : [];
   if (!items.length){
     activeWrap.innerHTML = '<div class="alert alert-info">You have not posted any rides yet.</div>';
-    doneWrap.innerHTML = '';
-    cancelWrap.innerHTML = '';
+    pastShell.hidden = true;
     return;
   }
 
-  const groups = { active: [], completed: [], cancelled: [] };
+  const groups = { active: [], past: [] };
   for (const item of items){
-    if (item.status === 'completed') groups.completed.push(item);
-    else if (item.status === 'cancelled' || item.status === 'rejected') groups.cancelled.push(item);
+    if (['completed', 'cancelled', 'rejected'].includes(item.status)) groups.past.push(item);
     else groups.active.push(item);
   }
 
@@ -225,12 +224,19 @@ async function load(el){
   };
 
   renderList(activeWrap, groups.active, '<div class="alert alert-info">No active rides. Create one to get started!</div>');
-  renderList(doneWrap, groups.completed, '<div class="alert alert-info">No completed rides yet.</div>');
-  renderList(cancelWrap, groups.cancelled, '<div class="alert alert-secondary">No cancelled rides.</div>');
+  if (!groups.past.length) {
+    pastShell.hidden = true;
+    pastWrap.innerHTML = '';
+  } else {
+    pastShell.hidden = false;
+    pastSummary.textContent = `Past rides (${groups.past.length})`;
+    renderList(pastWrap, groups.past, '');
+  }
 }
 
 function renderCard(item, el){
-  const dt = item.ride_datetime ? new Date(item.ride_datetime.replace(' ','T')+'Z').toLocaleString() : 'Any time';
+  const dt = formatDateTime(item.ride_datetime);
+  const postedAt = formatPostedTime(item.created_at);
   const seats = (item.package_only || item.seats===0) ? 'Package only' : `${item.seats} seat(s)`;
   const st = item.status || 'open';
   const card = document.createElement('div');
@@ -253,8 +259,9 @@ function renderCard(item, el){
       <div class="card-body">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-2">
           <div>
-            <h5 class="mb-1">${item.type==='offer'?'🚗 Offer':'🙋 Looking (request)'}</h5>
+            <h5 class="mb-1">${esc(rideTypeLabel(item.type))}</h5>
             ${badge(st)}
+            <div class="text-secondary small mt-1">${esc(postedAt)}</div>
           </div>
           <span class="badge text-bg-light">${esc(dt)}</span>
         </div>
@@ -335,13 +342,13 @@ function renderCard(item, el){
   if (st === 'completed' && item.confirmed && !item.already_rated){
     const rateBtn = document.createElement('button');
     rateBtn.className='btn btn-sm btn-warning ms-2';
-    rateBtn.textContent = item.type === 'offer' ? 'Rate passenger' : 'Rate driver';
+    rateBtn.textContent = item.type === 'offer' ? 'Rate rider' : 'Rate driver';
     rateBtn.addEventListener('click', ()=>{
       const form = document.createElement('form');
       form.className = 'rating-form border rounded-3 bg-body-tertiary p-3 text-start mt-2';
       form.innerHTML = `
         <div class="mb-2">
-          <label class="form-label small fw-semibold">Rate this ${item.type === 'offer' ? 'passenger' : 'driver'}</label>
+          <label class="form-label small fw-semibold">Rate this ${item.type === 'offer' ? 'rider' : 'driver'}</label>
           <div class="btn-group" role="group" aria-label="Rating">
             ${[1,2,3,4,5].map(n => `
               <input type="radio" class="btn-check" name="stars" id="rate-${item.id}-${n}" value="${n}" ${n===5?'checked':''}>

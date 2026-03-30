@@ -7,8 +7,10 @@ require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/status.php';
 require_once __DIR__ . '/../lib/notifications.php';
+require_once __DIR__ . '/../lib/rides.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Rides\{broadcast_ride_update, map_joiner_roles, quote_statuses, summarize_route};
 use function App\Status\{from_db, to_db};
 
 start_secure_session();
@@ -36,17 +38,10 @@ if ((int)$me['id'] === (int)$ride['user_id']) {
   $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'own_ride']); exit;
 }
 
-/* map roles */
-if ($ride['type'] === 'offer') {
-  $driver = (int)$ride['user_id'];
-  $pass   = (int)$me['id'];
-} else {
-  $driver = (int)$me['id'];
-  $pass   = (int)$ride['user_id'];
-}
+$roleMap = map_joiner_roles($ride, (int)$me['id']);
 
 /* if already fully matched, block; but allow multiple pendings */
-$final = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','in_progress','completed'])) . ") LIMIT 1");
+$final = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN (" . implode(',', quote_statuses($pdo, ['accepted','in_progress','completed'])) . ") LIMIT 1");
 $final->execute([':rid' => $rideId]);
 if ($final->fetch()) { $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'already_final']); exit; }
 
@@ -54,7 +49,11 @@ if ($final->fetch()) { $pdo->rollBack(); http_response_code(409); echo json_enco
 $dupe = $pdo->prepare("SELECT id, status FROM ride_matches
                        WHERE ride_id=:rid AND driver_user_id=:d AND passenger_user_id=:p
                        ORDER BY id DESC LIMIT 1");
-$dupe->execute([':rid'=>$rideId, ':d'=>$driver, ':p'=>$pass]);
+$dupe->execute([
+  ':rid'=>$rideId,
+  ':d'=>$roleMap['driver_user_id'],
+  ':p'=>$roleMap['passenger_user_id'],
+]);
 if ($row = $dupe->fetch(PDO::FETCH_ASSOC)) {
   $row['status'] = from_db($row['status']);
   if (in_array($row['status'], ['pending','accepted','in_progress','completed'], true)) {
@@ -65,7 +64,12 @@ if ($row = $dupe->fetch(PDO::FETCH_ASSOC)) {
 /* create PENDING */
 $ins = $pdo->prepare("INSERT INTO ride_matches(ride_id,driver_user_id,passenger_user_id,status)
                       VALUES(:rid,:d,:p,:status)");
-$ins->execute([':rid'=>$rideId, ':d'=>$driver, ':p'=>$pass, ':status'=>to_db('pending')]);
+$ins->execute([
+  ':rid'=>$rideId,
+  ':d'=>$roleMap['driver_user_id'],
+  ':p'=>$roleMap['passenger_user_id'],
+  ':status'=>to_db('pending'),
+]);
 
 $matchId = (int)$pdo->lastInsertId();
 
@@ -74,9 +78,7 @@ $pdo->commit();
 
 try {
     $actorName = trim((string)($me['display_name'] ?? ''));
-    $from = trim((string)($ride['from_text'] ?? ''));
-    $to   = trim((string)($ride['to_text'] ?? ''));
-    $summary = $from && $to ? "$from → $to" : ($from ?: $to ?: 'your ride');
+    $summary = summarize_route($ride);
     $title = 'New request for your ride';
     $body  = ($actorName !== '' ? $actorName : 'A member') . " asked to join $summary.";
     \App\Notifications\notify_ride_owner($pdo, $ride, $me, 'ride_match_requested', $title, $body, [
@@ -86,5 +88,7 @@ try {
 } catch (\Throwable $e) {
     error_log('notifications:match_request ' . $e->getMessage());
 }
+
+broadcast_ride_update($rideId, [(int)$ride['user_id'], (int)$me['id']], 'match_requested');
 
 echo json_encode(['ok'=>true,'status'=>'pending','match_id'=>$matchId]);

@@ -7,8 +7,10 @@ require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/status.php';
 require_once __DIR__ . '/../lib/notifications.php';
+require_once __DIR__ . '/../lib/rides.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Rides\{map_joiner_roles, quote_statuses, summarize_route};
 use function App\Status\{from_db, to_db};
 
 start_secure_session();
@@ -34,25 +36,18 @@ if ($r['status'] !== 'open') { $pdo->rollBack(); http_response_code(409); echo j
 $me = current_user();
 if ((int)$me['id'] === (int)$r['user_id']) { $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'own_ride']); exit; }
 
-// role mapping: if ride is an offer → owner is driver; if request → owner is passenger
-if ($r['type'] === 'offer') {
-  $driver = (int)$r['user_id'];
-  $pass   = (int)$me['id'];
-} else {
-  $driver = (int)$me['id'];
-  $pass   = (int)$r['user_id'];
-}
+$roleMap = map_joiner_roles($r, (int)$me['id']);
 
 // prevent duplicate active matches
-$ex = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','completed','in_progress'])) . ") LIMIT 1");
+$ex = $pdo->prepare("SELECT id FROM ride_matches WHERE ride_id=:rid AND status IN (" . implode(',', quote_statuses($pdo, ['accepted','completed','in_progress'])) . ") LIMIT 1");
 $ex->execute([':rid' => $rideId]);
 if ($ex->fetch()) { $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'already_matched']); exit; }
 
 $ins = $pdo->prepare("INSERT INTO ride_matches(ride_id,driver_user_id,passenger_user_id,status) VALUES(:rid,:d,:p,:status)");
 $ins->execute([
   ':rid' => $rideId,
-  ':d'   => $driver,
-  ':p'   => $pass,
+  ':d'   => $roleMap['driver_user_id'],
+  ':p'   => $roleMap['passenger_user_id'],
   ':status' => to_db('accepted'),
 ]);
 $matchId = (int)$pdo->lastInsertId();
@@ -65,9 +60,7 @@ echo json_encode(['ok'=>true]);
 
 try {
   $actorName = trim((string)($me['display_name'] ?? ''));
-  $from = trim((string)($r['from_text'] ?? ''));
-  $to   = trim((string)($r['to_text'] ?? ''));
-  $summary = $from && $to ? "$from → $to" : ($from ?: $to ?: 'your ride');
+  $summary = summarize_route($r);
   $title = 'Your ride has a new match';
   $body  = ($actorName !== '' ? $actorName : 'A member') . " joined $summary.";
   \App\Notifications\notify_ride_owner($pdo, $r, $me, 'ride_match_joined', $title, $body, [

@@ -20,6 +20,9 @@ $ride = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
   header('Location: /my_rides.php'); exit;
 }
+
+$rideLabel = ($ride['type'] === 'offer') ? 'Ride you are offering' : 'Ride you are requesting';
+$pendingLabel = ($ride['type'] === 'offer') ? 'Riders waiting for your reply' : 'Drivers waiting for your reply';
 ?>
 <!doctype html>
 <html lang="en">
@@ -54,7 +57,7 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
     </a>
   </div>
   <div class="text-muted mb-3">
-    <strong><?= htmlspecialchars($ride['type'] === 'offer' ? 'Offer' : 'Request') ?></strong> —
+    <strong><?= htmlspecialchars($rideLabel) ?></strong> —
     <?= htmlspecialchars($ride['from_text']) ?> → <?= htmlspecialchars($ride['to_text']) ?> ·
     <?= htmlspecialchars($ride['ride_datetime'] ?: 'Any time') ?>
   </div>
@@ -64,7 +67,7 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
   <div id="acceptedWrap" class="mb-4"></div>
 
   <h2 class="h6 d-flex align-items-center gap-2">
-    <i class="bi bi-hourglass-split"></i> Pending requests
+    <i class="bi bi-hourglass-split"></i> <?= htmlspecialchars($pendingLabel) ?>
   </h2>
   <div id="pendingWrap" class="vstack gap-2"></div>
 </div>
@@ -73,6 +76,7 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
   const API_BASE = '/api';
   const CSRF = <?= json_encode($csrf) ?>;
   const RIDE_ID = <?= (int)$ride['id'] ?>;
+  const RIDE_DATETIME = <?= json_encode((string)($ride['ride_datetime'] ?? '')) ?>;
 
   const esc = s => s ? String(s).replace(/[&<>"']/g, m => (
     {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]
@@ -89,6 +93,19 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
     const userId = Number(id);
     if (!userId) return label;
     return `<a class="text-decoration-none" href="/user.php?id=${userId}">${label}</a>`;
+  }
+
+  function formatDateTime(value){
+    if (!value) return 'Any time';
+    const dt = new Date(String(value).trim().replace(' ', 'T'));
+    if (Number.isNaN(dt.getTime())) return String(value);
+    return dt.toLocaleString([], {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
   }
 
   async function load(){
@@ -122,7 +139,7 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
     }
 
     // Accepted (if any)
-    const activeMatch = data.accepted || data.confirmed;
+    const activeMatch = data.confirmed;
     if (activeMatch) {
       const a = activeMatch;
       const contactHtml = buildContact(a.other_phone, a.other_whatsapp);
@@ -131,17 +148,18 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
         ? `<div class="mt-2">${contactHtml}</div>`
         : contactNotice;
       const otherLink = profileLink(a.other_id, a.other_display || 'User');
+      const activeLabel = data.ride?.type === 'offer' ? 'Current rider' : 'Current driver';
       acceptedWrap.innerHTML = `
         <div class="card shadow-sm">
           <div class="card-body d-flex justify-content-between">
             <div>
-              <div class="fw-semibold">Accepted match</div>
-              <div class="text-muted small">Other party: ${otherLink}</div>
+              <div class="fw-semibold">Current match</div>
+              <div class="text-muted small">${esc(activeLabel)}: ${otherLink}</div>
               <div class="mt-1">${badge(a.status || 'accepted')}</div>
               ${contactBlock || ''}
             </div>
             <div class="text-end">
-              <span class="badge text-bg-light">${esc(a.ride_datetime || 'Any time')}</span>
+              <span class="badge text-bg-light">${esc(formatDateTime(RIDE_DATETIME))}</span>
             </div>
           </div>
         </div>`;
@@ -150,19 +168,20 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
     // Pending list
     const pend = Array.isArray(data.pending) ? data.pending : [];
     if (!pend.length) {
-      pendingWrap.innerHTML = '<div class="alert alert-info">No pending requests.</div>';
+      pendingWrap.innerHTML = `<div class="alert alert-info">No one is waiting for a reply right now.</div>`;
       return;
     }
 
     for (const p of pend) {
       const contact = buildContact(p.requester_phone, p.requester_whatsapp);
       const notice = p.requester_contact_notice ? `<div class="mt-1 text-secondary small">${esc(p.requester_contact_notice)}</div>` : '';
+      const requesterRole = data.ride?.type === 'offer' ? 'Rider' : 'Driver';
       const row = document.createElement('div');
       row.className = 'border rounded p-2 d-flex justify-content-between align-items-center';
       row.innerHTML = `
         <div>
-          <div class="fw-semibold">${profileLink(p.requester_id, p.requester_name || 'User')}</div>
-          <div class="text-muted small">Requested: ${esc(p.created_at)}</div>
+          <div class="fw-semibold"><span class="text-muted">${esc(requesterRole)}:</span> ${profileLink(p.requester_id, p.requester_name || 'User')}</div>
+          <div class="text-muted small">Asked to join ${esc(formatDateTime(p.created_at))}</div>
           ${contact ? `<div class="mt-1">${contact}</div>` : notice}
         </div>
         <div>
@@ -201,7 +220,7 @@ if (!$ride || (int)$ride['user_id'] !== (int)$user['id']) {
       if (!j.ok) throw new Error(j.error || 'Failed');
 
       notice.className = 'alert alert-success';
-      notice.textContent = 'Confirmed. Ride is now matched.';
+      notice.textContent = 'Saved. This trip now has a confirmed match.';
       notice.classList.remove('d-none');
       load();
     } catch (err) {

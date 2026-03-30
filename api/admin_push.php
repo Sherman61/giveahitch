@@ -1,154 +1,105 @@
 <?php
 declare(strict_types=1);
 
-use Minishlink\WebPush\Subscription;
-use Minishlink\WebPush\WebPush;
-
 header('Content-Type: application/json; charset=utf-8');
 
-require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
-
+require_once __DIR__ . '/../lib/notifications.php';
+require_once __DIR__ . '/../lib/security.php';
+require_once __DIR__ . '/../lib/security_events.php';
 use function App\Auth\{assert_csrf_and_get_input, require_admin};
+use function App\Notifications\{broadcast_notification, deliver_push_notification, store_notification, unread_count};
 
 try {
-    require_admin();
+    $admin = require_admin();
     $input = assert_csrf_and_get_input();
 
-    $title = isset($input['title']) ? trim((string)$input['title']) : '';
-    $body  = isset($input['body']) ? trim((string)$input['body']) : '';
+    $title = trim((string)($input['title'] ?? ''));
+    $body = trim((string)($input['body'] ?? ''));
 
     if ($title === '') {
         http_response_code(422);
         echo json_encode(['ok' => false, 'error' => 'missing_title']);
-        return;
+        exit;
     }
 
     $pdo = db();
-    $stmt = $pdo->query('SELECT endpoint, p256dh, auth FROM push_subscriptions');
-    $subscriptions = $stmt ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [];
+    \App\Security\rate_limit($pdo, 'admin_push', 20, 900);
+    $stmt = $pdo->query("
+        SELECT DISTINCT user_id
+        FROM push_subscriptions
+        WHERE user_id IS NOT NULL
+          AND user_id > 0
+    ");
+    $userIds = $stmt ? array_values(array_unique(array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN) ?: []))) : [];
 
-    if (!$subscriptions) {
+    if (!$userIds) {
         http_response_code(404);
         echo json_encode(['ok' => false, 'error' => 'no_subscribers']);
-        return;
+        exit;
     }
 
-    $configPath = __DIR__ . '/../config/config.php';
-    if (!is_file($configPath)) {
-        throw new \RuntimeException('config_missing');
+    $usersNotified = 0;
+    $pushSent = 0;
+    $pushFailed = 0;
+    $deleted = 0;
+    $errors = [];
+
+    foreach ($userIds as $userId) {
+        $notification = store_notification($pdo, [
+            'user_id' => $userId,
+            'type' => 'system_announcement',
+            'title' => $title,
+            'body' => $body !== '' ? $body : null,
+            'actor_user_id' => (int)$admin['id'],
+            'actor_display_name' => (string)($admin['display_name'] ?? $admin['email'] ?? 'Admin'),
+            'metadata' => [
+                'url' => '/notifications.php',
+                'source' => 'admin_push',
+            ],
+        ]);
+
+        if (!$notification) {
+            continue;
+        }
+
+        $usersNotified++;
+        $unread = unread_count($pdo, $userId);
+        broadcast_notification($notification, $unread);
+
+        $delivery = deliver_push_notification($pdo, $notification);
+        $pushSent += (int)($delivery['sent'] ?? 0);
+        $pushFailed += (int)($delivery['failed'] ?? 0);
+        $deleted += (int)($delivery['deleted'] ?? 0);
+        if (!empty($delivery['errors']) && count($errors) < 5) {
+            $remaining = 5 - count($errors);
+            $errors = array_merge($errors, array_slice((array)$delivery['errors'], 0, $remaining));
+        }
     }
-    $config = require $configPath;
-    $vapid = $config['vapid'] ?? null;
 
-    if (!is_array($vapid)
-        || empty($vapid['public'])
-        || empty($vapid['private'])
-        || empty($vapid['subject'])
-    ) {
-        throw new \RuntimeException('invalid_vapid_config');
-    }
-
-    $payload = json_encode([
-        'title' => $title,
-        'body' => $body,
-        'icon' => '/assets/img/icon-192.png',
-        'badge' => '/assets/img/badge-72.png',
-        'url' => '/notifications.php',
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
-    if ($payload === false) {
-        throw new \RuntimeException('payload_encoding_failed');
-    }
-
-    $webPush = new WebPush([
-        'VAPID' => [
-            'subject' => $vapid['subject'],
-            'publicKey' => $vapid['public'],
-            'privateKey' => $vapid['private'],
+    \App\SecurityEvents\log_event($pdo, 'admin_push_sent', 'warning', [
+        'actor_user_id' => (int)$admin['id'],
+        'details' => $title,
+        'metadata' => [
+            'users_notified' => $usersNotified,
+            'push_sent' => $pushSent,
+            'push_failed' => $pushFailed,
+            'deleted_subscriptions' => $deleted,
         ],
     ]);
-    $webPush->setReuseVAPIDHeaders(true);
-
-    $sent = 0;
-    $failed = 0;
-    $invalidEndpoints = [];
-    $reports = [];
-
-    foreach ($subscriptions as $row) {
-        $endpoint = (string)($row['endpoint'] ?? '');
-        $p256dh = (string)($row['p256dh'] ?? '');
-        $auth = (string)($row['auth'] ?? '');
-
-        if ($endpoint === '' || $p256dh === '' || $auth === '') {
-            $failed++;
-            continue;
-        }
-
-        try {
-            $subscription = Subscription::create([
-                'endpoint' => $endpoint,
-                'publicKey' => $p256dh,
-                'authToken' => $auth,
-                'contentEncoding' => 'aes128gcm',
-            ]);
-        } catch (\Throwable $e) {
-            error_log('admin_push:subscription_invalid ' . $e->getMessage());
-            $failed++;
-            continue;
-        }
-
-        $webPush->queueNotification($subscription, $payload);
-    }
-
-    foreach ($webPush->flush() as $report) {
-        $endpoint = $report->getEndpoint();
-        if ($report->isSuccess()) {
-            $sent++;
-            continue;
-        }
-
-        $failed++;
-        $status = null;
-        $response = $report->getResponse();
-        if ($response) {
-            $status = $response->getStatusCode();
-        }
-        if (in_array($status, [404, 410], true) && $endpoint) {
-            $invalidEndpoints[$endpoint] = true;
-        }
-
-        if (count($reports) < 5) {
-            $reports[] = [
-                'endpoint' => $endpoint,
-                'reason' => $report->getReason(),
-                'status' => $status,
-            ];
-        }
-    }
-
-    if ($invalidEndpoints) {
-        $placeholders = implode(',', array_fill(0, count($invalidEndpoints), '?'));
-        $stmt = $pdo->prepare("DELETE FROM push_subscriptions WHERE endpoint IN ($placeholders)");
-        if ($stmt) {
-            $stmt->execute(array_keys($invalidEndpoints));
-        }
-    }
 
     echo json_encode([
         'ok' => true,
-        'sent' => $sent,
-        'failed' => $failed,
-        'total' => $sent + $failed,
-        'errors' => $reports,
-        'deleted' => count($invalidEndpoints),
-    ], JSON_UNESCAPED_UNICODE);
-} catch (\RuntimeException $e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-} catch (\Throwable $e) {
+        'users_notified' => $usersNotified,
+        'sent' => $pushSent,
+        'failed' => $pushFailed,
+        'deleted' => $deleted,
+        'errors' => $errors,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+} catch (Throwable $e) {
+    error_log('admin_push:error ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'server_error']);
 }

@@ -16,9 +16,18 @@ const totalCountEl = document.getElementById('countTotal');
 const offersCountEl = document.getElementById('countOffers');
 const requestsCountEl = document.getElementById('countRequests');
 const lastUpdatedEl = document.getElementById('lastUpdated');
+const rideReportModalEl = document.getElementById('rideReportModal');
+const rideReportForm = document.getElementById('rideReportForm');
+const rideReportRideIdInput = document.getElementById('rideReportRideId');
+const rideReportReasonSelect = document.getElementById('rideReportReason');
+const rideReportReasonHelp = document.getElementById('rideReportReasonHelp');
+const rideReportDetailsInput = document.getElementById('rideReportDetails');
+const rideReportMessage = document.getElementById('rideReportMessage');
+const rideReportSubmit = document.getElementById('rideReportSubmit');
 
 const meId = Number(window.ME_USER_ID || 0) || null;
 const API = typeof window.API_BASE === 'string' ? window.API_BASE : '/api';
+const rideReportReasons = window.RIDE_REPORT_REASONS || {};
 
 const STORAGE_KEY_ACCEPT_INTENT = 'ga_accept_ride_intent_v1';
 const ACCEPT_INTENT_TTL = 24 * 60 * 60 * 1000; // 24 hours
@@ -98,6 +107,7 @@ let rawItems = [];
 let isFetching = false;
 let autoRefreshTimer = null;
 let pendingAcceptIntent = meId ? readAcceptIntent() : null;
+let rideReportModal = null;
 
 const rtf = (typeof Intl !== 'undefined' && Intl.RelativeTimeFormat)
   ? new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
@@ -183,6 +193,60 @@ const buildContactLinks = (item) => {
   }
   if (!parts.length) return '<span class="text-secondary">No contact details provided yet.</span>';
   return parts.join('');
+};
+
+const requestedRideLabel = (status) => {
+  switch (status) {
+    case 'pending':
+      return { text: 'Request sent', className: 'btn btn-warning', icon: 'bi-hourglass-split' };
+    case 'accepted':
+    case 'matched':
+    case 'confirmed':
+      return { text: 'Ride confirmed', className: 'btn btn-primary', icon: 'bi-check2-circle' };
+    case 'in_progress':
+      return { text: 'Trip in progress', className: 'btn btn-info text-white', icon: 'bi-sign-turn-right' };
+    case 'completed':
+      return { text: 'Ride completed', className: 'btn btn-secondary', icon: 'bi-flag' };
+    default:
+      return null;
+  }
+};
+
+const setRideReportMessage = (type, text) => {
+  if (!rideReportMessage) return;
+  if (!text) {
+    rideReportMessage.className = 'alert d-none mt-3 mb-0';
+    rideReportMessage.textContent = '';
+    return;
+  }
+  rideReportMessage.className = `alert alert-${type} mt-3 mb-0`;
+  rideReportMessage.textContent = text;
+};
+
+const refreshRideReportHelp = () => {
+  if (!rideReportReasonSelect || !rideReportReasonHelp) return;
+  const reason = rideReportReasons[rideReportReasonSelect.value];
+  rideReportReasonHelp.textContent = reason?.description || '';
+};
+
+const openRideReportModal = (rideId) => {
+  if (!rideReportModalEl || !rideReportForm || !rideReportRideIdInput || !rideReportReasonSelect) return;
+  if (!meId) {
+    const loginUrl = new URL('/login.php', window.location.origin);
+    window.location.href = loginUrl.toString();
+    return;
+  }
+  rideReportForm.reset();
+  rideReportRideIdInput.value = String(rideId);
+  rideReportReasonSelect.innerHTML = '<option value="">Select a reason</option>' + Object.entries(rideReportReasons)
+    .map(([key, reason]) => `<option value="${escapeHtml(key)}">${escapeHtml(reason.label)}</option>`)
+    .join('');
+  setRideReportMessage('', '');
+  refreshRideReportHelp();
+  if (!rideReportModal && rideReportModalEl && window.bootstrap?.Modal) {
+    rideReportModal = new window.bootstrap.Modal(rideReportModalEl);
+  }
+  rideReportModal?.show();
 };
 
 const setLiveStatus = (online, label) => {
@@ -324,8 +388,10 @@ const render = (items) => {
       ? `<a class="fw-semibold text-decoration-none" href="/user.php?id=${item.user_id}">${escapeHtml(ownerName)}</a>`
       : `<span class="fw-semibold">${escapeHtml(ownerName)}</span>`;
     const isOwn = meId && item.user_id && Number(item.user_id) === meId;
-    const showAccept = item.status === 'open' && (!item.user_id || Number(item.user_id) !== meId);
+    const ownMatchState = requestedRideLabel(item.viewer_match_status);
+    const showAccept = item.status === 'open' && (!item.user_id || Number(item.user_id) !== meId) && !ownMatchState;
     const note = item.note ? `<div class="text-body mt-2"><i class="bi bi-chat-dots me-2 text-primary"></i>${escapeHtml(item.note)}</div>` : '';
+    const showReport = !isOwn;
 
     const card = document.createElement('article');
     card.className = `ride-card card shadow-sm ${cls} ${isOwn ? 'border-primary-subtle' : ''}`;
@@ -352,6 +418,8 @@ const render = (items) => {
           <div class="ride-actions text-md-end">
             <div class="contact-links mb-3">${buildContactLinks(item)}</div>
             ${showAccept ? `<button class="btn btn-success" data-accept="${item.id}"><i class="bi bi-check2-circle me-1"></i>Accept ride</button>` : ''}
+            ${!showAccept && ownMatchState ? `<button class="${ownMatchState.className}" type="button" disabled><i class="bi ${ownMatchState.icon} me-1"></i>${ownMatchState.text}</button>` : ''}
+            ${showReport ? `<button class="btn btn-outline-danger mt-2" type="button" data-report="${item.id}"><i class="bi bi-flag me-1"></i>Report ride</button>` : ''}
           </div>
         </div>
       </div>`;
@@ -366,6 +434,15 @@ const render = (items) => {
           : 'You need to log in or sign up to accept this ride. Continue?';
         if (!confirm(confirmMessage)) return;
         acceptRide(rideId, btn);
+      });
+    }
+
+    const reportBtn = card.querySelector('[data-report]');
+    if (reportBtn) {
+      reportBtn.addEventListener('click', () => {
+        const rideId = Number(reportBtn.getAttribute('data-report'));
+        if (!rideId) return;
+        openRideReportModal(rideId);
       });
     }
 
@@ -400,7 +477,16 @@ const acceptRide = async (rideId, btn = null) => {
     if (!res.ok || !data.ok) {
       throw new Error(data.error || 'Unable to accept ride');
     }
-    alert('Accepted! Once complete, remember to confirm the ride.');
+    const item = rawItems.find((ride) => Number(ride.id) === Number(rideId));
+    if (item) {
+      item.viewer_match_status = data.status || 'pending';
+    }
+    if (btn) {
+      btn.className = 'btn btn-warning';
+      btn.disabled = true;
+      btn.removeAttribute('data-accept');
+      btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Request sent';
+    }
     clearAcceptIntent();
     pendingAcceptIntent = null;
     await fetchRides({ showLoading: false, reason: 'accept' });
@@ -408,7 +494,7 @@ const acceptRide = async (rideId, btn = null) => {
     logger.error('rides:accept_failed', err, { rideId });
     alert(`Error accepting ride: ${err?.message || err}`);
   } finally {
-    if (btn) {
+    if (btn && btn.hasAttribute('data-accept')) {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Accept ride';
     }
@@ -556,6 +642,55 @@ const initEvents = () => {
     if (!document.hidden) {
       fetchRides({ showLoading: false, reason: 'visibility' });
       scheduleAutoRefresh();
+    }
+  });
+
+  rideReportReasonSelect?.addEventListener('change', refreshRideReportHelp);
+  rideReportForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!rideReportRideIdInput || !rideReportReasonSelect || !rideReportSubmit) return;
+
+    const rideId = Number(rideReportRideIdInput.value || 0);
+    const reason = rideReportReasonSelect.value;
+    const details = (rideReportDetailsInput?.value || '').trim();
+    if (!rideId || !reason) {
+      setRideReportMessage('warning', 'Choose a report reason first.');
+      return;
+    }
+
+    rideReportSubmit.disabled = true;
+    setRideReportMessage('', '');
+    try {
+      const res = await fetch(`${API}/ride_report.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          ride_id: rideId,
+          reason,
+          details,
+          csrf: window.CSRF_TOKEN || ''
+        })
+      });
+      const data = await res.json().catch(() => ({ ok: false }));
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Unable to submit report');
+      }
+      setRideReportMessage('success', 'Thanks. Your report was submitted for review.');
+      setTimeout(() => {
+        rideReportModal?.hide();
+      }, 900);
+    } catch (err) {
+      logger.error('rides:report_failed', err, { rideId, reason });
+      let message = 'We could not submit the report right now.';
+      if (err?.message === 'already_reported') {
+        message = 'You already submitted this report and it is still under review.';
+      } else if (err?.message === 'reporting_unavailable') {
+        message = 'Reporting is not available yet on this server. Please try again after the database update is applied.';
+      }
+      setRideReportMessage('danger', message);
+    } finally {
+      rideReportSubmit.disabled = false;
     }
   });
 };

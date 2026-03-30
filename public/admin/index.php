@@ -1,9 +1,11 @@
 <?php declare(strict_types=1);
 
 require_once __DIR__ . '/../../lib/auth.php';
+require_once __DIR__ . '/../../lib/admin_pages.php';
 
 $admin = \App\Auth\require_admin();
 $csrf  = \App\Auth\csrf_token();
+$adminPages = \App\AdminPages\all();
 ?>
 <!doctype html>
 <html lang="en">
@@ -16,6 +18,8 @@ $csrf  = \App\Auth\csrf_token();
   <style>
     body { background: #f8f9fb; }
     .card { border: 0; border-radius: 1rem; }
+    .admin-tool-card { height: 100%; text-decoration: none; color: inherit; transition: transform 0.18s ease, box-shadow 0.18s ease; }
+    .admin-tool-card:hover { transform: translateY(-2px); box-shadow: 0 1rem 2rem rgba(15, 23, 42, 0.08); }
     .admin-table thead th { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.08em; }
     .status-badge { text-transform: capitalize; }
     .table-actions .btn { min-width: 110px; }
@@ -28,18 +32,55 @@ $csrf  = \App\Auth\csrf_token();
   <div class="container">
     <header class="d-flex flex-wrap align-items-center gap-3 mb-4">
       <div>
-        <h1 class="h3 mb-1">Admin — Rides</h1>
-        <p class="text-secondary mb-0">Manage live ride offers and requests across the platform.</p>
+        <h1 class="h3 mb-1">Admin Home</h1>
+        <p class="text-secondary mb-0">Moderation, trust, notifications, and diagnostics in one place.</p>
       </div>
       <div class="ms-auto d-flex gap-2 align-items-center flex-wrap justify-content-end">
         <span class="badge text-bg-light text-secondary">Signed in as <?= htmlspecialchars($admin['display_name'] ?? $admin['email'] ?? 'Admin', ENT_QUOTES, 'UTF-8') ?></span>
+        <a class="btn btn-outline-danger btn-sm" href="/admin/reports.php"><i class="bi bi-flag me-1"></i>Reports</a>
+        <a class="btn btn-outline-success btn-sm" href="/admin/score.php"><i class="bi bi-graph-up-arrow me-1"></i>Scores</a>
         <a class="btn btn-outline-primary btn-sm" href="/admin/push.php"><i class="bi bi-broadcast-pin me-1"></i>Push notifications</a>
         <a class="btn btn-outline-secondary btn-sm" href="/rides.php"><i class="bi bi-arrow-left me-1"></i>Back to site</a>
       </div>
     </header>
 
-    <section class="card shadow-sm mb-4">
+    <section class="mb-4">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+          <h2 class="h5 mb-1">Available Admin Pages</h2>
+          <p class="text-secondary mb-0">Every active admin tool is linked here so you do not have to hunt for it.</p>
+        </div>
+      </div>
+      <div class="row g-3">
+        <?php foreach ($adminPages as $page): ?>
+          <div class="col-md-6 col-xl-4">
+            <a class="card shadow-sm admin-tool-card" href="<?= htmlspecialchars($page['path'], ENT_QUOTES, 'UTF-8') ?>">
+              <div class="card-body">
+                <div class="d-flex align-items-start gap-3">
+                  <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center text-primary" style="width:3rem;height:3rem;">
+                    <i class="bi <?= htmlspecialchars($page['icon'], ENT_QUOTES, 'UTF-8') ?>"></i>
+                  </div>
+                  <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                      <h3 class="h6 mb-0"><?= htmlspecialchars($page['title'], ENT_QUOTES, 'UTF-8') ?></h3>
+                      <span class="badge text-bg-light text-secondary"><?= htmlspecialchars($page['category'], ENT_QUOTES, 'UTF-8') ?></span>
+                    </div>
+                    <p class="text-secondary mb-0"><?= htmlspecialchars($page['description'], ENT_QUOTES, 'UTF-8') ?></p>
+                  </div>
+                </div>
+              </div>
+            </a>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    </section>
+
+    <section id="ride-moderation" class="card shadow-sm mb-4">
       <div class="card-body">
+        <div class="mb-3">
+          <h2 class="h5 mb-1">Ride Moderation</h2>
+          <p class="text-secondary mb-0">Manage live ride offers and requests across the platform.</p>
+        </div>
         <div class="row g-3 align-items-end">
           <div class="col-sm-4">
             <label class="form-label text-uppercase small text-secondary" for="adminStatus">Status</label>

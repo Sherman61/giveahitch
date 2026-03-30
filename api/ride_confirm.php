@@ -62,8 +62,8 @@ if (!is_admin() && (int)$me['id'] !== (int)$m['passenger_user_id']) {
 $pdo->prepare("UPDATE ride_matches SET status=:status WHERE id=:id")->execute([':status'=>to_db('completed'), ':id'=>$m['id']]);
 $pdo->prepare("UPDATE rides SET status=:status WHERE id=:rid")->execute([':status'=>to_db('completed'), ':rid'=>$rideId]);
 
-// bump counters/scores
-$pdo->prepare("UPDATE users SET rides_given_count = rides_given_count + 1, score = score + 500 WHERE id=:d")
+// bump trip counters
+$pdo->prepare("UPDATE users SET rides_given_count = rides_given_count + 1 WHERE id=:d")
     ->execute([':d'=>$m['driver_user_id']]);
 $pdo->prepare("UPDATE users SET rides_received_count = rides_received_count + 1 WHERE id=:p")
     ->execute([':p'=>$m['passenger_user_id']]);

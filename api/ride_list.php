@@ -40,6 +40,14 @@ try {
 
     $params = [];
 
+    // Hide rides after their visibility window expires:
+    // - 24h after ride_end_datetime when an end time exists
+    // - otherwise 48h after the ride was posted (created_at)
+    $sql .= " AND (
+                  (r.ride_end_datetime IS NOT NULL AND r.ride_end_datetime >= DATE_SUB(NOW(), INTERVAL 24 HOUR))
+                  OR (r.ride_end_datetime IS NULL AND r.created_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR))
+                )";
+
     // Only filter to open when NOT mine. If it's mine, show all statuses.
     if (!$mine) {
         if (!$all || !$isAdmin) {
@@ -52,11 +60,6 @@ try {
             }
         }
 
-        $sql .= " AND (
-                      (r.ride_end_datetime IS NOT NULL AND r.ride_end_datetime >= DATE_SUB(NOW(), INTERVAL 48 HOUR))
-                      OR (r.ride_end_datetime IS NULL AND r.ride_datetime IS NOT NULL AND r.ride_datetime >= DATE_SUB(NOW(), INTERVAL 48 HOUR))
-                      OR (r.ride_end_datetime IS NULL AND r.ride_datetime IS NULL AND r.created_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR))
-                    )";
     }
 
     if ($type === 'offer' || $type === 'request') {
@@ -76,6 +79,7 @@ try {
         }
         $sql .= " AND r.user_id = :uid";
         $params[':uid'] = (int)$user['id'];
+
     }
 
     $sql .= " ORDER BY COALESCE(r.ride_datetime, r.ride_end_datetime, r.created_at) ASC LIMIT :lim";
@@ -89,6 +93,7 @@ try {
 
     $rideIds = array_map('intval', array_column($rows, 'id'));
     $matchCounts = [];
+    $viewerMatchStatusByRide = [];
     if ($rideIds) {
       $ph = implode(',', array_fill(0, count($rideIds), '?'));
       $countSql = "
@@ -102,6 +107,25 @@ try {
         $rid    = (int)$row['ride_id'];
         $status = from_db($row['status']);
         $matchCounts[$rid][$status] = (int)$row['total'];
+      }
+
+      if ($myId) {
+        $viewerSql = "
+          SELECT ride_id, status, updated_at, confirmed_at, created_at
+          FROM ride_matches
+          WHERE ride_id IN ($ph)
+            AND (driver_user_id = ? OR passenger_user_id = ?)
+          ORDER BY COALESCE(confirmed_at, updated_at, created_at) DESC
+        ";
+        $viewerStmt = $pdo->prepare($viewerSql);
+        $viewerStmt->execute(array_merge($rideIds, [$myId, $myId]));
+        while ($row = $viewerStmt->fetch(PDO::FETCH_ASSOC)) {
+          $rideId = (int)$row['ride_id'];
+          if (isset($viewerMatchStatusByRide[$rideId])) {
+            continue;
+          }
+          $viewerMatchStatusByRide[$rideId] = from_db($row['status'] ?? null);
+        }
       }
     }
 
@@ -171,6 +195,7 @@ try {
       $r['confirmed']      = $confirmed;
       $r['already_rated']  = false; // default; updated below if the current user has rated this match
       $r['match_counts']   = $matchCounts[(int)$r['id']] ?? [];
+      $r['viewer_match_status'] = $viewerMatchStatusByRide[(int)$r['id']] ?? null;
       $r['owner_role']     = $r['type'] === 'offer' ? 'driver' : 'passenger';
       $r['other_role']     = $r['owner_role'] === 'driver' ? 'passenger' : 'driver';
 

@@ -282,6 +282,314 @@ function push_vapid_credentials(): ?array
     return $cache;
 }
 
+/**
+ * @return array{access_token:string,push_url:string}
+ */
+function expo_push_config(): array
+{
+    static $cache;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $configPath = __DIR__ . '/../config/config.php';
+    $config = is_file($configPath) ? require $configPath : [];
+    $expo = is_array($config['expo'] ?? null) ? $config['expo'] : [];
+
+    $cache = [
+        'access_token' => isset($expo['access_token']) ? trim((string)$expo['access_token']) : '',
+        'push_url' => isset($expo['push_url']) && trim((string)$expo['push_url']) !== ''
+            ? trim((string)$expo['push_url'])
+            : 'https://exp.host/--/api/v2/push/send',
+    ];
+
+    return $cache;
+}
+
+function is_expo_push_token(string $endpoint): bool
+{
+    return str_starts_with($endpoint, 'ExponentPushToken[')
+        || str_starts_with($endpoint, 'ExpoPushToken[');
+}
+
+/**
+ * @param array<string,mixed> $payloadData
+ * @param list<array<string,mixed>> $subscriptions
+ * @return array{sent:int,failed:int,deleted:int,errors:list<array<string,mixed>>}
+ */
+function deliver_web_push_notifications(PDO $pdo, array $payloadData, array $subscriptions): array
+{
+    $vapid = push_vapid_credentials();
+    if (!$vapid || !ensure_push_dependencies_loaded()) {
+        return ['sent' => 0, 'failed' => 0, 'deleted' => 0, 'errors' => []];
+    }
+
+    $payload = json_encode($payloadData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($payload === false) {
+        return ['sent' => 0, 'failed' => count($subscriptions), 'deleted' => 0, 'errors' => [['reason' => 'payload_encoding_failed']]];
+    }
+
+    try {
+        $webPush = new WebPush([
+            'VAPID' => [
+                'subject' => $vapid['subject'],
+                'publicKey' => $vapid['public'],
+                'privateKey' => $vapid['private'],
+            ],
+        ]);
+        $webPush->setReuseVAPIDHeaders(true);
+    } catch (Throwable $e) {
+        error_log('notifications:push_init_failed ' . $e->getMessage());
+        return ['sent' => 0, 'failed' => count($subscriptions), 'deleted' => 0, 'errors' => [['reason' => 'push_init_failed']]];
+    }
+
+    $queueable = 0;
+    foreach ($subscriptions as $row) {
+        $endpoint = trim((string)($row['endpoint'] ?? ''));
+        $p256dh = trim((string)($row['p256dh'] ?? ''));
+        $auth = trim((string)($row['auth'] ?? ''));
+
+        if ($endpoint === '' || $p256dh === '' || $auth === '' || is_expo_push_token($endpoint)) {
+            continue;
+        }
+
+        try {
+            $subscription = Subscription::create([
+                'endpoint' => $endpoint,
+                'publicKey' => $p256dh,
+                'authToken' => $auth,
+                'contentEncoding' => 'aes128gcm',
+            ]);
+            $webPush->queueNotification($subscription, $payload);
+            $queueable++;
+        } catch (Throwable $e) {
+            error_log('notifications:web_push_queue_failed ' . $e->getMessage());
+        }
+    }
+
+    if ($queueable === 0) {
+        return ['sent' => 0, 'failed' => 0, 'deleted' => 0, 'errors' => []];
+    }
+
+    $sent = 0;
+    $failed = 0;
+    $invalidEndpoints = [];
+    $errors = [];
+
+    try {
+        foreach ($webPush->flush() as $report) {
+            if ($report->isSuccess()) {
+                $sent++;
+                continue;
+            }
+
+            $failed++;
+            $endpoint = $report->getEndpoint();
+            $status = null;
+            $response = $report->getResponse();
+            if ($response) {
+                $status = $response->getStatusCode();
+            }
+            if (in_array($status, [404, 410], true) && $endpoint) {
+                $invalidEndpoints[$endpoint] = true;
+            }
+            if (count($errors) < 5) {
+                $errors[] = [
+                    'channel' => 'web',
+                    'endpoint' => $endpoint,
+                    'status' => $status,
+                    'reason' => $report->getReason(),
+                ];
+            }
+            error_log(sprintf(
+                'notifications:web_push_failed endpoint=%s status=%s reason=%s',
+                $endpoint ?: 'unknown',
+                $status !== null ? (string)$status : 'n/a',
+                $report->getReason()
+            ));
+        }
+    } catch (Throwable $e) {
+        error_log('notifications:web_push_flush_failed ' . $e->getMessage());
+        $failed += max(0, $queueable - $sent);
+        if (!$errors) {
+            $errors[] = ['channel' => 'web', 'reason' => 'flush_failed'];
+        }
+    }
+
+    if ($invalidEndpoints) {
+        try {
+            $placeholders = implode(',', array_fill(0, count($invalidEndpoints), '?'));
+            $stmt = $pdo->prepare("DELETE FROM push_subscriptions WHERE endpoint IN ($placeholders)");
+            if ($stmt) {
+                $stmt->execute(array_keys($invalidEndpoints));
+            }
+        } catch (PDOException $e) {
+            error_log('notifications:web_push_cleanup_failed ' . $e->getMessage());
+        }
+    }
+
+    return ['sent' => $sent, 'failed' => $failed, 'deleted' => count($invalidEndpoints), 'errors' => $errors];
+}
+
+/**
+ * @param array<string,mixed> $payloadData
+ * @param list<string> $tokens
+ * @return array{sent:int,failed:int,deleted:int,errors:list<array<string,mixed>>}
+ */
+function deliver_expo_push_notifications(array $payloadData, array $tokens): array
+{
+    $tokens = array_values(array_unique(array_filter(array_map(static fn($value): string => trim((string)$value), $tokens), static fn(string $token): bool => is_expo_push_token($token))));
+    if (!$tokens) {
+        return ['sent' => 0, 'failed' => 0, 'deleted' => 0, 'errors' => []];
+    }
+
+    $config = expo_push_config();
+    $messages = array_map(static function (string $token) use ($payloadData): array {
+        return [
+            'to' => $token,
+            'title' => (string)($payloadData['title'] ?? 'GlitchaHitch'),
+            'body' => (string)($payloadData['body'] ?? ''),
+            'data' => is_array($payloadData['data'] ?? null) ? $payloadData['data'] : [],
+            'sound' => 'default',
+            'channelId' => 'default',
+        ];
+    }, $tokens);
+
+    $sent = 0;
+    $failed = 0;
+    $errors = [];
+
+    foreach (array_chunk($messages, 100) as $chunk) {
+        $headers = [
+            'Accept: application/json',
+            'Content-Type: application/json',
+            'Accept-encoding: gzip, deflate',
+        ];
+        if ($config['access_token'] !== '') {
+            $headers[] = 'Authorization: Bearer ' . $config['access_token'];
+        }
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => implode("\r\n", $headers),
+                'content' => json_encode($chunk, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'timeout' => 15,
+                'ignore_errors' => true,
+            ],
+        ]);
+
+        $responseBody = @file_get_contents($config['push_url'], false, $context);
+        $statusLine = $http_response_header[0] ?? '';
+        preg_match('/\s(\d{3})\s/', $statusLine, $matches);
+        $status = isset($matches[1]) ? (int)$matches[1] : 0;
+
+        if ($responseBody === false || $status < 200 || $status >= 300) {
+            $failed += count($chunk);
+            if (count($errors) < 5) {
+                $errors[] = [
+                    'channel' => 'expo',
+                    'status' => $status,
+                    'reason' => 'expo_request_failed',
+                ];
+            }
+            error_log('notifications:expo_push_request_failed status=' . $status);
+            continue;
+        }
+
+        $decoded = json_decode($responseBody, true);
+        $tickets = is_array($decoded['data'] ?? null) ? $decoded['data'] : [];
+        if (!$tickets) {
+            $failed += count($chunk);
+            if (count($errors) < 5) {
+                $errors[] = [
+                    'channel' => 'expo',
+                    'status' => $status,
+                    'reason' => 'expo_bad_response',
+                ];
+            }
+            continue;
+        }
+
+        foreach ($tickets as $ticket) {
+            if (($ticket['status'] ?? '') === 'ok') {
+                $sent++;
+                continue;
+            }
+            $failed++;
+            if (count($errors) < 5) {
+                $errors[] = [
+                    'channel' => 'expo',
+                    'status' => $status,
+                    'reason' => $ticket['message'] ?? ($ticket['details']['error'] ?? 'expo_send_failed'),
+                ];
+            }
+        }
+    }
+
+    return ['sent' => $sent, 'failed' => $failed, 'deleted' => 0, 'errors' => $errors];
+}
+
+/**
+ * @return array{sent:int,failed:int,deleted:int,errors:list<array<string,mixed>>}
+ */
+function deliver_push_notification(PDO $pdo, array $notification): array
+{
+    $userId = (int)($notification['user_id'] ?? 0);
+    if ($userId <= 0) {
+        return ['sent' => 0, 'failed' => 0, 'deleted' => 0, 'errors' => []];
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = :uid');
+        $stmt->execute([':uid' => $userId]);
+        $subscriptions = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (PDOException $e) {
+        error_log('notifications:push_fetch_failed ' . $e->getMessage());
+        return ['sent' => 0, 'failed' => 0, 'deleted' => 0, 'errors' => []];
+    }
+
+    if (!$subscriptions) {
+        return ['sent' => 0, 'failed' => 0, 'deleted' => 0, 'errors' => []];
+    }
+
+    $url = notification_target_url($notification);
+    $body = isset($notification['body']) && $notification['body'] !== null
+        ? (string)$notification['body']
+        : '';
+
+    $payloadData = [
+        'title' => (string)($notification['title'] ?? 'GlitchaHitch'),
+        'body' => $body,
+        'icon' => '/assets/img/icon-192.png',
+        'badge' => '/assets/img/badge-72.png',
+        'url' => $url,
+        'tag' => 'notification-' . (int)($notification['id'] ?? 0),
+        'data' => [
+            'url' => $url,
+            'notification_id' => (int)($notification['id'] ?? 0),
+            'type' => $notification['type'] ?? null,
+            'ride_id' => $notification['ride_id'] ?? null,
+            'match_id' => $notification['match_id'] ?? null,
+        ],
+    ];
+
+    if (!empty($notification['metadata']) && is_array($notification['metadata'])) {
+        $payloadData['data']['metadata'] = $notification['metadata'];
+    }
+
+    $web = deliver_web_push_notifications($pdo, $payloadData, $subscriptions);
+    $expoTokens = array_map(static fn(array $row): string => (string)($row['endpoint'] ?? ''), $subscriptions);
+    $expo = deliver_expo_push_notifications($payloadData, $expoTokens);
+
+    return [
+        'sent' => $web['sent'] + $expo['sent'],
+        'failed' => $web['failed'] + $expo['failed'],
+        'deleted' => $web['deleted'] + $expo['deleted'],
+        'errors' => array_slice(array_merge($web['errors'], $expo['errors']), 0, 5),
+    ];
+}
+
 /** Ensure the WebPush dependencies are available before attempting delivery. */
 function ensure_push_dependencies_loaded(): bool
 {
@@ -330,150 +638,15 @@ function notification_target_url(array $notification): string
  */
 function send_push_notification(PDO $pdo, array $notification): void
 {
-    $userId = (int)($notification['user_id'] ?? 0);
-    if ($userId <= 0) {
-        return;
-    }
-
-    $vapid = push_vapid_credentials();
-    if (!$vapid || !ensure_push_dependencies_loaded()) {
-        return;
-    }
-
-    try {
-        $stmt = $pdo->prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = :uid');
-        $stmt->execute([':uid' => $userId]);
-        $subscriptions = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    } catch (PDOException $e) {
-        error_log('notifications:push_fetch_failed ' . $e->getMessage());
-        return;
-    }
-
-    if (!$subscriptions) {
-        return;
-    }
-
-    $url = notification_target_url($notification);
-    $body = isset($notification['body']) && $notification['body'] !== null
-        ? (string)$notification['body']
-        : '';
-
-    $payloadData = [
-        'title' => (string)($notification['title'] ?? 'GlitchaHitch'),
-        'body' => $body,
-        'icon' => '/assets/img/icon-192.png',
-        'badge' => '/assets/img/badge-72.png',
-        'url' => $url,
-        'tag' => 'notification-' . (int)($notification['id'] ?? 0),
-        'data' => [
-            'url' => $url,
-            'notification_id' => (int)($notification['id'] ?? 0),
-            'type' => $notification['type'] ?? null,
-            'ride_id' => $notification['ride_id'] ?? null,
-            'match_id' => $notification['match_id'] ?? null,
-        ],
-    ];
-
-    if (!empty($notification['metadata']) && is_array($notification['metadata'])) {
-        $payloadData['data']['metadata'] = $notification['metadata'];
-    }
-
-    $payload = json_encode($payloadData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if ($payload === false) {
-        return;
-    }
-
-    try {
-        $webPush = new WebPush([
-            'VAPID' => [
-                'subject' => $vapid['subject'],
-                'publicKey' => $vapid['public'],
-                'privateKey' => $vapid['private'],
-            ],
-        ]);
-        $webPush->setReuseVAPIDHeaders(true);
-    } catch (Throwable $e) {
-        error_log('notifications:push_init_failed ' . $e->getMessage());
-        return;
-    }
-
-    foreach ($subscriptions as $row) {
-        $endpoint = (string)($row['endpoint'] ?? '');
-        $p256dh = (string)($row['p256dh'] ?? '');
-        $auth = (string)($row['auth'] ?? '');
-
-        if ($endpoint === '' || $p256dh === '' || $auth === '') {
-            continue;
-        }
-
-        try {
-            $subscription = Subscription::create([
-                'endpoint' => $endpoint,
-                'publicKey' => $p256dh,
-                'authToken' => $auth,
-                'contentEncoding' => 'aes128gcm',
-            ]);
-        } catch (Throwable $e) {
-            error_log('notifications:push_subscription_invalid ' . $e->getMessage());
-            continue;
-        }
-
-        try {
-            $webPush->queueNotification($subscription, $payload);
-        } catch (Throwable $e) {
-            error_log('notifications:push_queue_failed ' . $e->getMessage());
-        }
-    }
-
-    $invalidEndpoints = [];
-
-    try {
-        foreach ($webPush->flush() as $report) {
-            if ($report->isSuccess()) {
-                continue;
-            }
-
-            $endpoint = $report->getEndpoint();
-            $status = null;
-            $response = $report->getResponse();
-            if ($response) {
-                $status = $response->getStatusCode();
-            }
-
-            if (in_array($status, [404, 410], true) && $endpoint) {
-                $invalidEndpoints[$endpoint] = true;
-            }
-
-            error_log(sprintf(
-                'notifications:push_failed endpoint=%s status=%s reason=%s',
-                $endpoint ?: 'unknown',
-                $status !== null ? (string)$status : 'n/a',
-                $report->getReason()
-            ));
-        }
-    } catch (Throwable $e) {
-        error_log('notifications:push_flush_failed ' . $e->getMessage());
-    }
-
-    if ($invalidEndpoints) {
-        try {
-            $placeholders = implode(',', array_fill(0, count($invalidEndpoints), '?'));
-            $stmt = $pdo->prepare("DELETE FROM push_subscriptions WHERE endpoint IN ($placeholders)");
-            if ($stmt) {
-                $stmt->execute(array_keys($invalidEndpoints));
-            }
-        } catch (PDOException $e) {
-            error_log('notifications:push_cleanup_failed ' . $e->getMessage());
-        }
-    }
+    deliver_push_notification($pdo, $notification);
 }
 
 /**
- * Create a notification for a user. Returns the formatted notification or null if skipped.
+ * Persist a notification row for a user after settings checks pass.
  *
  * @param array<string,mixed> $data
  */
-function create(PDO $pdo, array $data): ?array
+function store_notification(PDO $pdo, array $data): ?array
 {
     $userId = isset($data['user_id']) ? (int)$data['user_id'] : 0;
     $type = isset($data['type']) ? (string)$data['type'] : '';
@@ -514,6 +687,22 @@ function create(PDO $pdo, array $data): ?array
         return null;
     }
 
+    return $notification;
+}
+
+/**
+ * Create a notification for a user. Returns the formatted notification or null if skipped.
+ *
+ * @param array<string,mixed> $data
+ */
+function create(PDO $pdo, array $data): ?array
+{
+    $notification = store_notification($pdo, $data);
+    if (!$notification) {
+        return null;
+    }
+
+    $userId = (int)($notification['user_id'] ?? 0);
     $unread = unread_count($pdo, $userId);
     broadcast_notification($notification, $unread);
     send_push_notification($pdo, $notification);

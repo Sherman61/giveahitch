@@ -6,8 +6,10 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/status.php';
+require_once __DIR__ . '/../lib/rides.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Rides\{broadcast_ride_update, find_latest_match, quote_statuses};
 use function App\Status\{from_db, to_db};
 
 start_secure_session();
@@ -53,31 +55,10 @@ try {
   if (!isset($transitions[$currentStatus]) || !in_array($newStatus, $transitions[$currentStatus], true)) {
     throw new RuntimeException('illegal_transition');
   }
-  // If moving to in_progress or completed, ensure there's an active match
-  $driverId    = (int)$ride['user_id'];
-  $passengerId = 0;
-  //does this belong here?
-$pdo->prepare("UPDATE users SET score = score + 50 WHERE id IN (:d,:p)")
-    ->execute([':d'=>$driverId, ':p'=>$passengerId]);
-
-  
+  // If moving to in_progress or completed, ensure there's an active match.
   $activeMatch = null;
   if (in_array($newStatus, ['in_progress','completed'], true)) {
-    $statusesForSelect = ['accepted','confirmed','in_progress','completed'];
-    $quoted = array_map(fn(string $s) => $pdo->quote(to_db($s)), $statusesForSelect);
-    $matchSql = "
-      SELECT * FROM ride_matches
-      WHERE ride_id=:rid AND status IN (" . implode(',', $quoted) . ")
-      ORDER BY COALESCE(confirmed_at, updated_at, created_at) DESC
-      LIMIT 1
-      FOR UPDATE
-    ";
-    $mq = $pdo->prepare($matchSql);
-    $mq->execute([':rid'=>$rideId]);
-    $activeMatch = $mq->fetch(PDO::FETCH_ASSOC);
-    if ($activeMatch) {
-      $activeMatch['status'] = from_db($activeMatch['status']);
-    }
+    $activeMatch = find_latest_match($pdo, $rideId, ['accepted','confirmed','in_progress','completed'], true);
     if (!$activeMatch || ($activeMatch['status'] === 'completed' && $newStatus !== 'completed')) {
       throw new RuntimeException('no_active_match');
     }
@@ -113,14 +94,19 @@ $pdo->prepare("UPDATE users SET score = score + 50 WHERE id IN (:d,:p)")
   }
 
   if ($newStatus === 'cancelled') {
-    $statusesToCancel = ['pending','accepted','confirmed','in_progress'];
-    $quotedCancel = array_map(fn(string $s) => $pdo->quote(to_db($s)), $statusesToCancel);
-    $inList = implode(',', $quotedCancel);
+    $inList = implode(',', quote_statuses($pdo, ['pending','accepted','confirmed','in_progress']));
     $pdo->prepare("UPDATE ride_matches SET status=:cancelled, updated_at=NOW() WHERE ride_id=:rid AND status IN ($inList)")
         ->execute([':cancelled'=>to_db('cancelled'), ':rid'=>$rideId]);
   }
 
+  $broadcastUserIds = [(int)$ride['user_id']];
+  if ($activeMatch) {
+    $broadcastUserIds[] = (int)($activeMatch['driver_user_id'] ?? 0);
+    $broadcastUserIds[] = (int)($activeMatch['passenger_user_id'] ?? 0);
+  }
+
   $pdo->commit();
+  broadcast_ride_update($rideId, $broadcastUserIds, 'ride_status_changed');
   echo json_encode(['ok'=>true, 'status'=>$newStatus]);
 } catch (RuntimeException $e) {
   $pdo->rollBack();

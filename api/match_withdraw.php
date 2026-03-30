@@ -7,8 +7,10 @@ require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/status.php';
 require_once __DIR__ . '/../lib/notifications.php';
+require_once __DIR__ . '/../lib/rides.php';
 
 use function App\Auth\{require_login, csrf_verify};
+use function App\Rides\broadcast_ride_update;
 use function App\Status\{from_db, to_db};
 
 start_secure_session();
@@ -68,6 +70,7 @@ try {
   } catch (\Throwable $notifyError) {
     error_log('notifications:match_withdraw ' . $notifyError->getMessage());
   }
+  broadcast_ride_update((int)$m['ride_id'], [(int)$m['owner_id'], (int)$m['driver_user_id'], (int)$m['passenger_user_id']], 'match_withdrawn');
 } catch (RuntimeException $e) {
   $pdo->rollBack();
   $code = $e->getMessage();

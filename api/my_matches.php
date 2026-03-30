@@ -34,6 +34,8 @@ try {
         r.from_text,
         r.to_text,
         r.ride_datetime,
+        r.ride_end_datetime,
+        r.created_at         AS ride_created_at,
 
         m.driver_user_id,
         m.passenger_user_id,
@@ -52,6 +54,10 @@ try {
       JOIN users du ON du.id = m.driver_user_id
       JOIN users pu ON pu.id = m.passenger_user_id
       WHERE 1=1
+        AND (
+          (r.ride_end_datetime IS NOT NULL AND r.ride_end_datetime >= DATE_SUB(NOW(), INTERVAL 24 HOUR))
+          OR (r.ride_end_datetime IS NULL AND r.created_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR))
+        )
     ";
 
     $params = [];

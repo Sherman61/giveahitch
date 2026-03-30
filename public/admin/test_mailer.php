@@ -96,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div><label class="form-label">From (optional)</label>
                                 <input type="email" class="form-control" name="from"
                                     placeholder="hello@glitchahitch.com"
-                                    value="<?= htmlspecialchars($_POST['from'] ?? '', ENT_QUOTES) ?>">
+                                    value="<?= htmlspecialchars($_POST['from'] ?? 'no-reply@glitchahitch.com', ENT_QUOTES) ?>">
                             </div>
                             <div><label class="form-label">Subject</label>
                                 <input type="text" class="form-control" name="subject"

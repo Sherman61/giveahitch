@@ -30,29 +30,29 @@ $pdo = db();
 try {
     $pdo->beginTransaction();
 
-    // Lock ride & match
-    $ride = $pdo->prepare("SELECT id, user_id, status FROM rides WHERE id=:rid AND deleted=0 FOR UPDATE");
-    $ride->execute([':rid'=>$rideId]);
-    $r = $ride->fetch(PDO::FETCH_ASSOC);
-    if (!$r) { $pdo->rollBack(); http_response_code(404); echo json_encode(['ok'=>false,'error'=>'ride_not_found']); exit; }
-    $r['status'] = from_db($r['status']);
+    // Lock the ride and chosen match together.
+    $rideStmt = $pdo->prepare("SELECT id, user_id, status FROM rides WHERE id=:rid AND deleted=0 FOR UPDATE");
+    $rideStmt->execute([':rid'=>$rideId]);
+    $ride = $rideStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$ride) { $pdo->rollBack(); http_response_code(404); echo json_encode(['ok'=>false,'error'=>'ride_not_found']); exit; }
+    $ride['status'] = from_db($ride['status']);
 
-    $match = $pdo->prepare("
+    $matchStmt = $pdo->prepare("
         SELECT id, ride_id, driver_user_id, passenger_user_id, status
         FROM ride_matches WHERE id=:mid AND ride_id=:rid FOR UPDATE
     ");
-    $match->execute([':mid'=>$matchId, ':rid'=>$rideId]);
-    $m = $match->fetch(PDO::FETCH_ASSOC);
-    if (!$m) { $pdo->rollBack(); http_response_code(404); echo json_encode(['ok'=>false,'error'=>'match_not_found']); exit; }
-    $m['status'] = from_db($m['status']);
+    $matchStmt->execute([':mid'=>$matchId, ':rid'=>$rideId]);
+    $match = $matchStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$match) { $pdo->rollBack(); http_response_code(404); echo json_encode(['ok'=>false,'error'=>'match_not_found']); exit; }
+    $match['status'] = from_db($match['status']);
 
     // Must be the driver or the passenger to mark complete
-    if ($uid !== (int)$m['driver_user_id'] && $uid !== (int)$m['passenger_user_id']) {
+    if ($uid !== (int)$match['driver_user_id'] && $uid !== (int)$match['passenger_user_id']) {
         $pdo->rollBack(); http_response_code(403); echo json_encode(['ok'=>false,'error'=>'forbidden']); exit;
     }
 
     // Acceptable states before completing
-    if (!in_array($m['status'], ['confirmed','in_progress'], true)) {
+    if (!in_array($match['status'], ['confirmed','in_progress'], true)) {
         $pdo->rollBack(); http_response_code(409); echo json_encode(['ok'=>false,'error'=>'bad_state']); exit;
     }
 
@@ -63,11 +63,11 @@ try {
     $pdo->prepare("UPDATE rides SET status=:status WHERE id=:rid")
         ->execute([':status'=>to_db('completed'), ':rid'=>$rideId]);
 
-    // Optionally increment given/received counters *at completion*:
+    // Increment trip counters at completion.
     $pdo->prepare("UPDATE users SET rides_given_count = rides_given_count + 1 WHERE id=:id")
-        ->execute([':id'=>$m['driver_user_id']]);
+        ->execute([':id'=>$match['driver_user_id']]);
     $pdo->prepare("UPDATE users SET rides_received_count = rides_received_count + 1 WHERE id=:id")
-        ->execute([':id'=>$m['passenger_user_id']]);
+        ->execute([':id'=>$match['passenger_user_id']]);
 
     $pdo->commit();
     echo json_encode(['ok'=>true,'status'=>'completed']);

@@ -1,5 +1,6 @@
 <?php declare(strict_types=1);
 require_once __DIR__.'/../lib/auth.php';
+require_once __DIR__.'/../lib/ws.php';
 $user = \App\Auth\require_login();
 $csrf = \App\Auth\csrf_token();
 ini_set('display_errors', '1');
@@ -7,6 +8,7 @@ ini_set('display_startup_errors', '1');
 ini_set('log_errors', '1');                 // still log to the PHP error log
 error_reporting(E_ALL);
   $me   = \App\Auth\current_user();
+  $wsToken = \App\WS\generate_token((int)($user['id'] ?? 0));
 ?>
 <!doctype html>
 <html lang="en">
@@ -23,33 +25,19 @@ error_reporting(E_ALL);
   </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg bg-body-tertiary mb-3">
-  <div class="container">
-    <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="/rides.php">
-      <i class="bi bi-steering-wheel"></i> Glitch a Hitch
-    </a>
-    <div class="ms-auto d-flex align-items-center gap-2">
-      <span class="navbar-text small text-muted d-none d-md-inline">
-        <?= htmlspecialchars($user['display_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>
-       <a class="btn btn-outline-secondary btn-sm" href="user.php?id=<?= (int)$me['id'] ?>"
-       title="View profile" aria-label="View profile">
-      <i class="bi bi-person-circle me-1"></i>
-    </a>
-      </span>
-       
-      <a class="btn btn-outline-secondary btn-sm" href="/rides.php"><i class="bi bi-map me-1"></i>All rides</a>
-      <a class="btn btn-outline-danger btn-sm" href="/logout.php"><i class="bi bi-box-arrow-right me-1"></i>Logout</a>
-    </div>
-  </div>
-</nav>
+<?php include __DIR__ . '/header.php'; ?>
 
 <div class="container">
+  <div class="mb-4">
+    <h1 class="h3 mb-1">My Rides</h1>
+    <p class="text-secondary mb-0">Track rides you posted and trips you joined, whether you are driving or riding along.</p>
+  </div>
   <ul class="nav nav-pills mb-3" id="switcher" role="tablist">
     <li class="nav-item" role="presentation">
-      <button class="nav-link active" data-view="posted" type="button">I posted (offers & looking)</button>
+      <button class="nav-link active" data-view="posted" type="button">Rides you posted</button>
     </li>
     <li class="nav-item" role="presentation">
-      <button class="nav-link" data-view="driver" type="button">As Driver (accepted & pending)</button>
+      <button class="nav-link" data-view="driver" type="button">Trips you joined</button>
     </li>
   </ul>
 
@@ -62,9 +50,10 @@ error_reporting(E_ALL);
   window.CSRF     = <?= json_encode($csrf) ?>;
   window.MY_ID    = <?= (int)$user['id'] ?>;
   window.ME_NAME  = <?= json_encode($user['display_name'] ?? 'You') ?>;  // <-- add this
+  window.WS_AUTH  = <?= json_encode($wsToken ? ['userId' => (int)$user['id'], 'token' => $wsToken] : null, JSON_UNESCAPED_SLASHES) ?>;
 </script>
 
-
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
 
 <!-- Load both components and toggle which one is shown -->
 <script type="module">
@@ -88,6 +77,16 @@ error_reporting(E_ALL);
   let current = 'posted';
   // initial mount
   views[current].mount();
+  let refreshTimer = null;
+
+  const refreshCurrent = () => {
+    views[current].mount();
+  };
+
+  const scheduleRefresh = () => {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refreshCurrent, 120);
+  };
 
   function show(which){
     if (which === current) return;
@@ -113,8 +112,26 @@ error_reporting(E_ALL);
   // deep link via hash (#driver or #posted)
   const wanted = (location.hash || '').replace('#','');
   if (wanted && views[wanted]) show(wanted);
-</script>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  const auth = window.WS_AUTH || null;
+  if (typeof io === 'function' && auth?.token) {
+    try {
+      const socket = io({ path: '/socket.io', transports: ['websocket', 'polling'] });
+      socket.on('connect', () => {
+        socket.emit('auth', { token: auth.token });
+      });
+      socket.on('ride:updated', () => {
+        scheduleRefresh();
+      });
+      socket.on('notification:new', (payload) => {
+        if (payload?.notification?.ride_id) {
+          scheduleRefresh();
+        }
+      });
+    } catch (error) {
+      console.warn('my_rides:socket_init_failed', error);
+    }
+  }
+</script>
 </body>
 </html>

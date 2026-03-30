@@ -3,11 +3,13 @@
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/ws.php';
+require_once __DIR__ . '/../lib/reports.php';
 
 start_secure_session();
 $me   = \App\Auth\current_user();
 $csrf = \App\Auth\csrf_token();
 $wsToken = $me ? \App\WS\generate_token((int)$me['id']) : null;
+$rideReportReasons = \App\Reports\ride_report_reasons();
 ?>
 <!doctype html>
 <html lang="en">
@@ -21,6 +23,7 @@ $wsToken = $me ? \App\WS\generate_token((int)$me['id']) : null;
     window.ME_USER_ID = <?= $me ? (int) $me['id'] : 'null' ?>;
     window.CSRF_TOKEN = <?= json_encode($csrf, JSON_UNESCAPED_SLASHES) ?>;
     window.API_BASE   = '/api';
+    window.RIDE_REPORT_REASONS = <?= json_encode($rideReportReasons, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     window.WS_URL = <?= json_encode($_ENV['WS_URL'] ?? '') ?>;
     window.WS_AUTH = <?= json_encode($wsToken ? ['userId' => (int)$me['id'], 'token' => $wsToken] : null, JSON_UNESCAPED_SLASHES) ?>;
   </script>
@@ -265,6 +268,41 @@ $wsToken = $me ? \App\WS\generate_token((int)$me['id']) : null;
     </div>
 
     <div id="ridesList" class="vstack gap-3"></div>
+  </div>
+
+  <div class="modal fade" id="rideReportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title h5 mb-1">Report this ride</h2>
+            <p class="text-secondary small mb-0">Choose the reason that best matches the problem. Add details if you want the team to review context faster.</p>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="rideReportForm" class="vstack gap-3">
+            <input type="hidden" name="ride_id" id="rideReportRideId">
+            <div>
+              <label class="form-label fw-semibold" for="rideReportReason">Reason</label>
+              <select class="form-select" id="rideReportReason" name="reason" required></select>
+              <div class="form-text" id="rideReportReasonHelp"></div>
+            </div>
+            <div>
+              <label class="form-label fw-semibold" for="rideReportDetails">Details (optional)</label>
+              <textarea class="form-control" id="rideReportDetails" name="details" rows="4" maxlength="1000" placeholder="Add anything that will help us understand what happened."></textarea>
+            </div>
+          </form>
+          <div id="rideReportMessage" class="alert d-none mt-3 mb-0"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" form="rideReportForm" class="btn btn-danger" id="rideReportSubmit">
+            <i class="bi bi-flag-fill me-1"></i>Submit report
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>

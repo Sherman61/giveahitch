@@ -47,46 +47,51 @@ if ((int)$ride['user_id'] !== $uid) {
 }
 
 /**
- * 2) Determine which side is the requester for *this* ride:
- *    - If the ride is an OFFER, then requesters are PASSENGERS (passenger_user_id).
- *    - If the ride is a REQUEST (looking), then requesters are DRIVERS (driver_user_id).
+ * 2) Determine who is asking to join this ride.
+ *
+ * For an offer:
+ * - the owner is offering to drive
+ * - joiners are passengers
+ *
+ * For a request:
+ * - the owner is looking for a ride as the passenger
+ * - joiners are drivers
  */
 $ride['status'] = from_db($ride['status'] ?? 'open');
-$whoCol = ($ride['type'] === 'offer') ? 'passenger_user_id' : 'driver_user_id';
+$joinerUserColumn = ($ride['type'] === 'offer') ? 'passenger_user_id' : 'driver_user_id';
 
 /**
- * 3) List all PENDING matches for the manage modal.
- *    We join to users for display_name (and phone/whatsapp if your users table has them).
- *    If you don’t store phone/whatsapp in users, these will just come back null.
+ * 3) List all pending people waiting for the owner to respond.
+ *    We join to users for display_name and contact fields.
  */
-$pendingSql = "
+$pendingJoinersSql = "
 SELECT
     m.id                 AS match_id,
     m.status,
     m.created_at,
-    u.id                 AS requester_id,
-    u.display_name       AS requester_name,
+    u.id                 AS joiner_user_id,
+    u.display_name       AS joiner_name,
     /* Optional: include if your users table has these columns */
-    u.phone              AS requester_phone,
-    u.whatsapp           AS requester_whatsapp,
-    u.contact_privacy    AS requester_contact_privacy
+    u.phone              AS joiner_phone,
+    u.whatsapp           AS joiner_whatsapp,
+    u.contact_privacy    AS joiner_contact_privacy
 FROM ride_matches m
-JOIN users u ON u.id = m.$whoCol
+JOIN users u ON u.id = m.$joinerUserColumn
 WHERE m.ride_id = :rid
   AND m.status  = 'pending'
 ORDER BY m.created_at ASC
 ";
-$pendingStmt = $pdo->prepare($pendingSql);
-$pendingStmt->execute([':rid' => $rideId]);
-$pending = $pendingStmt->fetchAll(PDO::FETCH_ASSOC);
+$pendingJoinersStmt = $pdo->prepare($pendingJoinersSql);
+$pendingJoinersStmt->execute([':rid' => $rideId]);
+$pendingJoiners = $pendingJoinersStmt->fetchAll(PDO::FETCH_ASSOC);
 
 /**
- * 4) Return current confirmed/accepted match (if any) for context.
- *    We show the “other party” (the non-owner) consistently in the payload.
+ * 4) Return the current joined person for this ride, if any.
+ *    The payload always exposes the non-owner as the "other" person.
  */
-$otherCol = ($ride['type'] === 'offer') ? 'passenger_user_id' : 'driver_user_id';
+$selectedJoinerUserColumn = ($ride['type'] === 'offer') ? 'passenger_user_id' : 'driver_user_id';
 
-$confirmedSql = "
+$selectedMatchSql = "
 SELECT
     m.id              AS match_id,
     m.status,
@@ -100,20 +105,24 @@ SELECT
     u.whatsapp        AS other_whatsapp,
     u.contact_privacy AS other_contact_privacy
 FROM ride_matches m
-JOIN users u ON u.id = m.$otherCol
+JOIN users u ON u.id = m.$selectedJoinerUserColumn
 WHERE m.ride_id = :rid
   AND m.status IN (" . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['accepted','confirmed','in_progress','completed','cancelled'])) . ")
 ORDER BY FIELD(m.status," . implode(',', array_map(fn(string $s) => $pdo->quote(to_db($s)), ['confirmed','accepted','in_progress','completed','cancelled'])) . "), m.created_at DESC
 LIMIT 1
 ";
-$confStmt = $pdo->prepare($confirmedSql);
-$confStmt->execute([':rid' => $rideId]);
-$confirmed = $confStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+$selectedMatchStmt = $pdo->prepare($selectedMatchSql);
+$selectedMatchStmt->execute([':rid' => $rideId]);
+$selectedMatch = $selectedMatchStmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
-foreach ($pending as &$row) {
-    $row['status'] = from_db($row['status']);
+foreach ($pendingJoiners as &$joiner) {
+    $joiner['requester_id'] = (int)$joiner['joiner_user_id'];
+    $joiner['requester_name'] = $joiner['joiner_name'];
+    $joiner['requester_phone'] = $joiner['joiner_phone'];
+    $joiner['requester_whatsapp'] = $joiner['joiner_whatsapp'];
+    $joiner['status'] = from_db($joiner['status']);
     $visibility = \App\Privacy\evaluate($me, [
-        'privacy' => (int)($row['requester_contact_privacy'] ?? 1),
+        'privacy' => (int)($joiner['joiner_contact_privacy'] ?? 1),
         'viewer_is_owner' => false,
         'viewer_is_target' => false,
         'viewer_is_admin' => !empty($me['is_admin']),
@@ -124,37 +133,43 @@ foreach ($pending as &$row) {
         'target_has_active_open_ride' => false,
     ]);
     if (empty($visibility['visible'])) {
-        $row['requester_phone'] = null;
-        $row['requester_whatsapp'] = null;
+        $joiner['requester_phone'] = null;
+        $joiner['requester_whatsapp'] = null;
     }
-    $row['requester_contact_visibility'] = $visibility;
-    $row['requester_contact_notice'] = $visibility['visible'] ? null : ($visibility['reason'] ?? '');
-    unset($row['requester_contact_privacy']);
+    $joiner['requester_contact_visibility'] = $visibility;
+    $joiner['requester_contact_notice'] = $visibility['visible'] ? null : ($visibility['reason'] ?? '');
+    unset(
+        $joiner['joiner_user_id'],
+        $joiner['joiner_name'],
+        $joiner['joiner_phone'],
+        $joiner['joiner_whatsapp'],
+        $joiner['joiner_contact_privacy']
+    );
 }
-unset($row);
+unset($joiner);
 
-if ($confirmed) {
-    $confirmed['status'] = from_db($confirmed['status']);
-    $matchChangedAt = $confirmed['updated_at'] ?? $confirmed['confirmed_at'] ?? $confirmed['created_at'] ?? null;
+if ($selectedMatch) {
+    $selectedMatch['status'] = from_db($selectedMatch['status']);
+    $matchChangedAt = $selectedMatch['updated_at'] ?? $selectedMatch['confirmed_at'] ?? $selectedMatch['created_at'] ?? null;
     $visibility = \App\Privacy\evaluate($me, [
-        'privacy' => (int)($confirmed['other_contact_privacy'] ?? 1),
+        'privacy' => (int)($selectedMatch['other_contact_privacy'] ?? 1),
         'viewer_is_owner' => true,
         'viewer_is_target' => false,
         'viewer_is_admin' => !empty($me['is_admin']),
         'viewer_logged_in' => true,
         'viewer_has_active_match' => true,
-        'match_status' => $confirmed['status'],
+        'match_status' => $selectedMatch['status'],
         'match_changed_at' => $matchChangedAt,
         'target_has_active_open_ride' => false,
     ]);
     if (empty($visibility['visible'])) {
-        $confirmed['other_phone'] = null;
-        $confirmed['other_whatsapp'] = null;
+        $selectedMatch['other_phone'] = null;
+        $selectedMatch['other_whatsapp'] = null;
     }
-    $confirmed['other_contact_visibility'] = $visibility;
-    $confirmed['other_contact_notice'] = $visibility['visible'] ? null : ($visibility['reason'] ?? '');
-    $confirmed['other_display'] = $confirmed['other_name'] ?? null;
-    unset($confirmed['other_contact_privacy']);
+    $selectedMatch['other_contact_visibility'] = $visibility;
+    $selectedMatch['other_contact_notice'] = $visibility['visible'] ? null : ($visibility['reason'] ?? '');
+    $selectedMatch['other_display'] = $selectedMatch['other_name'] ?? null;
+    unset($selectedMatch['other_contact_privacy']);
 }
 
 /** 5) Respond */
@@ -165,6 +180,6 @@ echo json_encode([
         'type'   => $ride['type'],
         'status' => $ride['status'],
     ],
-    'pending'   => $pending,
-    'confirmed' => $confirmed,
+    'pending'   => $pendingJoiners,
+    'confirmed' => $selectedMatch,
 ]);

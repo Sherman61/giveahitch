@@ -24,7 +24,7 @@ $csrf  = \App\Auth\csrf_token();
     <header class="d-flex flex-wrap align-items-center gap-3 mb-4">
       <div>
         <h1 class="h3 mb-1">Admin — Push notifications</h1>
-        <p class="text-secondary mb-0">Send a manual push message to every subscribed device.</p>
+        <p class="text-secondary mb-0">Send a manual announcement to subscribed browser devices and Expo app devices.</p>
       </div>
       <div class="ms-auto d-flex gap-2 align-items-center flex-wrap">
         <span class="badge text-bg-light text-secondary">Signed in as <?= htmlspecialchars($admin['display_name'] ?? $admin['email'] ?? 'Admin', ENT_QUOTES, 'UTF-8') ?></span>
@@ -56,8 +56,8 @@ $csrf  = \App\Auth\csrf_token();
         </form>
         <hr class="my-4">
         <div class="small text-secondary">
-          <p class="mb-1"><strong>Tip:</strong> Devices must have previously enabled push notifications on the site to receive this broadcast.</p>
-          <p class="mb-0">Invalid or expired subscriptions are automatically removed after each send.</p>
+          <p class="mb-1"><strong>Tip:</strong> Members receive an in-app notification, and subscribed browser or Expo devices also receive a push notification.</p>
+          <p class="mb-0">Invalid browser subscriptions are automatically removed after each send.</p>
         </div>
       </div>
     </section>
@@ -135,8 +135,9 @@ $csrf  = \App\Auth\csrf_token();
           return;
         }
 
-        const { sent = 0, failed = 0, deleted = 0 } = result;
-        const summary = [`Sent to ${sent} subscription${sent === 1 ? '' : 's'}`];
+        const { users_notified = 0, sent = 0, failed = 0, deleted = 0 } = result;
+        const summary = [`Notified ${users_notified} member${users_notified === 1 ? '' : 's'}`];
+        if (sent) summary.push(`${sent} push ${sent === 1 ? 'delivery' : 'deliveries'}`);
         if (failed) summary.push(`${failed} failed`);
         if (deleted) summary.push(`${deleted} removed`);
         showAlert('success', `Push notification sent successfully. ${summary.join(', ')}.`);

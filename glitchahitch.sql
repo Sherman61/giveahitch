@@ -168,6 +168,48 @@ CREATE TABLE `ride_ratings` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `score_events`
+--
+
+CREATE TABLE `score_events` (
+  `id` bigint UNSIGNED NOT NULL,
+  `user_id` bigint UNSIGNED NOT NULL,
+  `points_delta` int NOT NULL,
+  `reason_key` varchar(64) NOT NULL,
+  `reason_label` varchar(255) NOT NULL,
+  `details` varchar(1000) DEFAULT NULL,
+  `related_ride_id` bigint UNSIGNED DEFAULT NULL,
+  `related_match_id` bigint UNSIGNED DEFAULT NULL,
+  `related_rating_id` bigint UNSIGNED DEFAULT NULL,
+  `actor_user_id` bigint UNSIGNED DEFAULT NULL,
+  `metadata` json DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `ride_reports`
+--
+
+CREATE TABLE `ride_reports` (
+  `id` bigint UNSIGNED NOT NULL,
+  `ride_id` bigint UNSIGNED NOT NULL,
+  `reporter_user_id` bigint UNSIGNED NOT NULL,
+  `reported_user_id` bigint UNSIGNED DEFAULT NULL,
+  `reason_key` varchar(64) NOT NULL,
+  `details` varchar(1000) DEFAULT NULL,
+  `status` enum('open','reviewing','closed','dismissed') NOT NULL DEFAULT 'open',
+  `admin_notes` text,
+  `reviewed_by_user_id` bigint UNSIGNED DEFAULT NULL,
+  `reviewed_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 --
 -- Dumping data for table `ride_ratings`
 --
@@ -305,6 +347,26 @@ ALTER TABLE `ride_ratings`
   ADD KEY `idx_rr_rater` (`rater_user_id`);
 
 --
+-- Indexes for table `score_events`
+--
+ALTER TABLE `score_events`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_score_events_user_created` (`user_id`,`created_at`),
+  ADD KEY `idx_score_events_reason` (`reason_key`),
+  ADD KEY `idx_score_events_ride` (`related_ride_id`),
+  ADD KEY `idx_score_events_match` (`related_match_id`);
+
+--
+-- Indexes for table `ride_reports`
+--
+ALTER TABLE `ride_reports`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_ride_reports_ride` (`ride_id`),
+  ADD KEY `idx_ride_reports_reporter` (`reporter_user_id`),
+  ADD KEY `idx_ride_reports_status` (`status`,`created_at`),
+  ADD KEY `idx_ride_reports_reported_user` (`reported_user_id`);
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
@@ -364,6 +426,18 @@ ALTER TABLE `ride_ratings`
   MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
+-- AUTO_INCREMENT for table `score_events`
+--
+ALTER TABLE `score_events`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `ride_reports`
+--
+ALTER TABLE `ride_reports`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
@@ -405,6 +479,25 @@ ALTER TABLE `ride_ratings`
   ADD CONSTRAINT `fk_rr_match` FOREIGN KEY (`match_id`) REFERENCES `ride_matches` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `fk_rr_rated` FOREIGN KEY (`rated_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
   ADD CONSTRAINT `fk_rr_rater` FOREIGN KEY (`rater_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT;
+
+--
+-- Constraints for table `score_events`
+--
+ALTER TABLE `score_events`
+  ADD CONSTRAINT `fk_score_events_actor` FOREIGN KEY (`actor_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_score_events_match` FOREIGN KEY (`related_match_id`) REFERENCES `ride_matches` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_score_events_rating` FOREIGN KEY (`related_rating_id`) REFERENCES `ride_ratings` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_score_events_ride` FOREIGN KEY (`related_ride_id`) REFERENCES `rides` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_score_events_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `ride_reports`
+--
+ALTER TABLE `ride_reports`
+  ADD CONSTRAINT `fk_ride_reports_reported_user` FOREIGN KEY (`reported_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_ride_reports_reporter` FOREIGN KEY (`reporter_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_ride_reports_reviewed_by` FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_ride_reports_ride` FOREIGN KEY (`ride_id`) REFERENCES `rides` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `user_message_threads`
@@ -461,4 +554,3 @@ CREATE TABLE `notifications` (
   KEY `idx_notifications_unread` (`user_id`,`is_read`),
   CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-

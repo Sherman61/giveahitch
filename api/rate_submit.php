@@ -6,8 +6,10 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/session.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/status.php';
+require_once __DIR__ . '/../lib/scoring.php';
 
 use function App\Auth\{require_login, current_user, csrf_verify};
+use function App\Scoring\{award, rating_bonus_for};
 use function App\Status\from_db;
 
 start_secure_session();
@@ -100,8 +102,7 @@ try {
     $upd = $pdo->prepare("
       UPDATE users
       SET driver_rating_sum   = driver_rating_sum   + :s,
-          driver_rating_count = driver_rating_count + 1,
-          score               = score + :bonus
+          driver_rating_count = driver_rating_count + 1
       WHERE id = :u
     ");
   } else {
@@ -109,13 +110,26 @@ try {
     $upd = $pdo->prepare("
       UPDATE users
       SET passenger_rating_sum   = passenger_rating_sum   + :s,
-          passenger_rating_count = passenger_rating_count + 1,
-          score                  = score + :bonus
+          passenger_rating_count = passenger_rating_count + 1
       WHERE id = :u
     ");
   }
-  $bonus = ($stars === 5) ? 100 : 0; // +100 score for a 5-star rating
-  $upd->execute([':s'=>$stars, ':u'=>$ratedUserId, ':bonus'=>$bonus]);
+  $bonus = rating_bonus_for($stars);
+  $upd->execute([':s'=>$stars, ':u'=>$ratedUserId]);
+  award($pdo, $ratedUserId, $bonus, 'perfect_rating_received', [
+    'ride_id' => $rideId,
+    'match_id' => $matchId,
+    'rating_id' => (int)$pdo->lastInsertId(),
+    'actor_user_id' => $uid,
+    'details' => $raterRole === 'passenger'
+      ? 'You received a 5-star driver rating.'
+      : 'You received a 5-star rider rating.',
+    'metadata' => [
+      'stars' => $stars,
+      'rated_role' => $ratedRole,
+      'rater_role' => $raterRole,
+    ],
+  ]);
 
   $pdo->commit();
   echo json_encode(['ok'=>true, 'bonus'=>$bonus]);

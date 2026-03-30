@@ -164,7 +164,11 @@ function ratingBlock(label, rating){
             </div>
             <div class="text-lg-end w-100 w-lg-auto">
               <span class="badge text-bg-primary fs-6">Score ${u.score}</span>
-              ${data.is_self ? `<div class="mt-2"><a class="btn btn-outline-primary btn-sm" href="/profile.php"><i class="bi bi-gear me-1"></i>Edit profile</a></div>` : ''}
+              ${data.is_self ? `<div class="mt-2 d-flex flex-wrap justify-content-lg-end gap-2">
+                <a class="btn btn-outline-primary btn-sm" href="/profile.php"><i class="bi bi-gear me-1"></i>Edit profile</a>
+                <a class="btn btn-outline-secondary btn-sm" href="/score_history.php"><i class="bi bi-graph-up-arrow me-1"></i>Score history</a>
+                <a class="btn btn-outline-secondary btn-sm" href="/docs/trust.php"><i class="bi bi-shield-check me-1"></i>Trust guide</a>
+              </div>` : ''}
               ${chatBlock}
             </div>
           </div>
