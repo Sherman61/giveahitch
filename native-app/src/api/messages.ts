@@ -6,7 +6,7 @@ export interface MessageThread {
     id: number;
     displayName?: string | null;
     username?: string | null;
-    isOnline?: boolean;
+    isOnline?: boolean | null;
   };
   lastMessageAt?: string | null;
   lastMessage?: Message;
@@ -41,6 +41,7 @@ export type ServerThread = {
     id: number;
     display_name?: string | null;
     username?: string | null;
+    is_online?: boolean | null;
   };
   last_message_at?: string | null;
   unread_count?: number;
@@ -112,6 +113,7 @@ export function mapThread(row: ServerThread): MessageThread {
       id: row.other_user?.id ?? 0,
       displayName: row.other_user?.display_name ?? null,
       username: row.other_user?.username ?? null,
+      isOnline: row.other_user?.is_online ?? null,
     },
     lastMessageAt: row.last_message_at,
     unreadCount: row.unread_count ?? 0,
