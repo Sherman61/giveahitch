@@ -7,6 +7,7 @@ $navItems = [
     ['title' => 'Rides', 'href' => '/docs/rides.php'],
     ['title' => 'Score', 'href' => '/docs/score.php'],
     ['title' => 'Trust', 'href' => '/docs/trust.php'],
+    ['title' => 'Security', 'href' => '/docs/security.php'],
 ];
 
 render_markdown_doc_page(

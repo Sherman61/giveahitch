@@ -3,9 +3,11 @@
 require_once __DIR__ . '/_render.php';
 
 $navItems = [
+    ['title' => 'Schema', 'href' => '/docs/schema.php'],
     ['title' => 'Rides', 'href' => '/docs/rides.php'],
     ['title' => 'Score', 'href' => '/docs/score.php'],
     ['title' => 'Trust', 'href' => '/docs/trust.php', 'active' => true],
+    ['title' => 'Security', 'href' => '/docs/security.php'],
 ];
 
 render_markdown_doc_page(

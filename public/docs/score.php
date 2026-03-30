@@ -6,9 +6,11 @@ require_once __DIR__ . '/../../lib/scoring.php';
 use function App\Scoring\{rules, zero_point_events};
 
 $navItems = [
+    ['title' => 'Schema', 'href' => '/docs/schema.php'],
     ['title' => 'Rides', 'href' => '/docs/rides.php'],
     ['title' => 'Score', 'href' => '/docs/score.php', 'active' => true],
     ['title' => 'Trust', 'href' => '/docs/trust.php'],
+    ['title' => 'Security', 'href' => '/docs/security.php'],
 ];
 
 $cards = '';
