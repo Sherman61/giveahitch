@@ -35,6 +35,16 @@ const NotificationsContext = createContext<NotificationsContextValue | null>(
 
 const uuidPattern =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const ANDROID_CHANNEL_ID = "default";
+
+function isAndroidPushConfigured(): boolean {
+  const extra =
+    (Constants.expoConfig?.extra as {
+      googleServicesFileConfigured?: boolean;
+    }) ?? {};
+
+  return Boolean(extra.googleServicesFileConfigured);
+}
 
 function resolveExpoProjectId(): string | null {
   const extra =
@@ -76,10 +86,31 @@ function useNotificationsInternal(): NotificationsContextValue {
     };
   }, []);
 
+  const ensureAndroidChannelAsync = useCallback(async () => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+      name: "Default",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#2563eb",
+    });
+  }, []);
+
   const registerAsync = useCallback(async () => {
     if (!Device.isDevice) {
       console.warn("Push notifications only work on physical devices.");
       return null;
+    }
+
+    await ensureAndroidChannelAsync();
+
+    if (Platform.OS === "android" && !isAndroidPushConfigured()) {
+      throw new Error(
+        "Android push is not configured yet. Add google-services.json and rebuild the app."
+      );
     }
 
     const { status: existingStatus } =
@@ -115,7 +146,9 @@ function useNotificationsInternal(): NotificationsContextValue {
       typeof (Application as Record<string, unknown>).getAndroidIdAsync ===
         "function"
         ? await (
-            Application as { getAndroidIdAsync: () => Promise<string | null> }
+            Application as unknown as {
+              getAndroidIdAsync: () => Promise<string | null>;
+            }
           ).getAndroidIdAsync()
         : null;
     const deviceId =
@@ -126,47 +159,42 @@ function useNotificationsInternal(): NotificationsContextValue {
       Device.modelName ??
       "unknown-device";
 
-    let lastError: unknown = null;
-    try {
-      await registerPushToken({
-        device_id: deviceId,
-        expo_push_token: token,
-        platform: Platform.OS,
-      });
-    } catch (error) {
-      lastError = error;
-      console.warn("Failed to register Expo token on server", error);
-    }
+    await registerPushToken({
+      device_id: deviceId,
+      expo_push_token: token,
+      platform: Platform.OS,
+    });
 
-    try {
-      await savePushSubscription({
-        endpoint: token,
-        deviceId,
-        platform: Platform.OS,
-        userAgent: Device.modelName ?? undefined,
-      });
-    } catch (error) {
-      lastError = error;
-      console.warn("Failed to store push subscription", error);
-    }
-
-    if (lastError) {
-      throw lastError;
-    }
+    await savePushSubscription({
+      endpoint: token,
+      deviceId,
+      platform: Platform.OS,
+      userAgent: Device.modelName ?? undefined,
+    });
 
     return token;
-  }, []);
+  }, [ensureAndroidChannelAsync]);
 
   const scheduleLocalTest = useCallback(async () => {
+    await ensureAndroidChannelAsync();
     await Notifications.scheduleNotificationAsync({
       content: {
         title: "Glitch A Hitch",
         body: "Local notification test successful!",
         data: { route: "Rides" },
+        ...(Platform.OS === "android"
+          ? { sound: "default" as const }
+          : {}),
       },
-      trigger: { seconds: 2 },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 2,
+        ...(Platform.OS === "android"
+          ? { channelId: ANDROID_CHANNEL_ID }
+          : {}),
+      },
     });
-  }, []);
+  }, [ensureAndroidChannelAsync]);
 
   return { expoPushToken, lastNotification, registerAsync, scheduleLocalTest };
 }

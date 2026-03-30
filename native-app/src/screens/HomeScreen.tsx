@@ -11,12 +11,27 @@ import { spacing } from '@/constants/layout';
 
 export const HomeScreen: FC = () => {
   const { expoPushToken, lastNotification, registerAsync, scheduleLocalTest } = useNotifications();
-  const { notifications, loading, refresh } = useNotificationFeed();
+  const { notifications, loading, error, refresh } = useNotificationFeed();
   const [permissionRequested, setPermissionRequested] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const onRegister = async () => {
-    await registerAsync();
-    setPermissionRequested(true);
+    try {
+      setActionError(null);
+      await registerAsync();
+      setPermissionRequested(true);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to enable notifications.');
+    }
+  };
+
+  const onSendLocalTest = async () => {
+    try {
+      setActionError(null);
+      await scheduleLocalTest();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to schedule the test notification.');
+    }
   };
 
   return (
@@ -32,10 +47,11 @@ export const HomeScreen: FC = () => {
         <PrimaryButton label="Enable Push Notifications" onPress={onRegister} style={styles.cardButton} />
         <PrimaryButton
           label="Send Test Notification"
-          onPress={scheduleLocalTest}
+          onPress={onSendLocalTest}
           variant="secondary"
           accessory={<NotificationBadge count={lastNotification ? 1 : 0} />}
         />
+        {actionError && <Text style={styles.warning}>{actionError}</Text>}
         {permissionRequested && !expoPushToken && (
           <Text style={styles.warning}>Grant notification permissions in device settings.</Text>
         )}
@@ -50,6 +66,7 @@ export const HomeScreen: FC = () => {
       </Card>
 
       <Text style={styles.sectionTitle}>Recent Notifications</Text>
+      {error && <Text style={styles.warning}>{error}</Text>}
       {notifications.map((item) => (
         <NotificationCard key={item.id} notification={item} />
       ))}

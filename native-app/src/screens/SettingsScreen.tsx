@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import { FC, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, TouchableOpacity, Linking } from 'react-native';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -13,9 +13,28 @@ interface Props {
 
 export const SettingsScreen: FC<Props> = ({ onBack }) => {
   const { expoPushToken, registerAsync, scheduleLocalTest } = useNotifications();
+  const [notificationError, setNotificationError] = useState<string | null>(null);
 
   const openLink = (path: string) => {
     Linking.openURL(`https://glitchahitch.com${path}`).catch(() => {});
+  };
+
+  const handleRegister = async () => {
+    try {
+      setNotificationError(null);
+      await registerAsync();
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Unable to enable notifications.');
+    }
+  };
+
+  const handleLocalTest = async () => {
+    try {
+      setNotificationError(null);
+      await scheduleLocalTest();
+    } catch (err) {
+      setNotificationError(err instanceof Error ? err.message : 'Unable to schedule the test notification.');
+    }
   };
 
   return (
@@ -24,10 +43,11 @@ export const SettingsScreen: FC<Props> = ({ onBack }) => {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Alerts and notifications</Text>
-        <PrimaryButton label="Enable push notifications" onPress={registerAsync} />
-        <TouchableOpacity style={styles.secondaryButton} onPress={scheduleLocalTest}>
+        <PrimaryButton label="Enable push notifications" onPress={handleRegister} />
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleLocalTest}>
           <Text style={styles.secondaryButtonText}>Send test notification</Text>
         </TouchableOpacity>
+        {notificationError && <Text style={styles.errorText}>{notificationError}</Text>}
         {expoPushToken && (
           <View style={styles.tokenBox}>
             <Text style={styles.tokenLabel}>Expo push token</Text>
@@ -121,5 +141,8 @@ const styles = StyleSheet.create({
   },
   bodyText: {
     color: palette.text,
+  },
+  errorText: {
+    color: palette.danger,
   },
 });

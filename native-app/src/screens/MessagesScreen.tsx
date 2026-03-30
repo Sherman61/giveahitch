@@ -11,7 +11,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { useNotifications } from '@/hooks/useNotifications';
 import { fetchConversation, fetchThreads, Message, MessageThread, sendMessage } from '@/api/messages';
 import { PageHeader } from '@/components/PageHeader';
-import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
+import { useChatSocket } from '@/hooks/useChatSocket';
 
 dayjs.extend(relativeTime);
 
@@ -167,11 +167,50 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
     );
   }, [userId]);
 
-  const { connectionState, presenceByUserId, typingByUserId, setTyping, markRead } = useRealtimeMessages({
+  const handleMessagesDeleted = useCallback(({ thread, deletedMessageIds, otherUserId }: { thread?: MessageThread; deletedMessageIds: number[]; otherUserId?: number }) => {
+    if (deletedMessageIds.length === 0) {
+      return;
+    }
+
+    setMessages((prev) => prev.filter((item) => !deletedMessageIds.includes(item.id)));
+
+    if (thread) {
+      setThreads((prev) => {
+        const filtered = prev.filter((item) => item.otherUser.id !== thread.otherUser.id);
+        return [thread, ...filtered];
+      });
+
+      if (activeUserId === thread.otherUser.id) {
+        setActiveThread(thread);
+      }
+      return;
+    }
+
+    if (!otherUserId) {
+      return;
+    }
+
+    setThreads((prev) =>
+      prev.map((item) => {
+        if (item.otherUser.id !== otherUserId || !item.lastMessage || !deletedMessageIds.includes(item.lastMessage.id)) {
+          return item;
+        }
+
+        return {
+          ...item,
+          lastMessage: undefined,
+        };
+      }),
+    );
+  }, [activeUserId]);
+
+  const { connectionState, presenceByUserId, typingByUserId, setTyping, markRead } = useChatSocket({
     userId: user?.id ?? null,
     activeUserId,
+    activeThreadId: activeThread?.id ?? null,
     onIncomingMessage: handleIncomingMessage,
     onMessagesRead: handleMessagesRead,
+    onMessagesDeleted: handleMessagesDeleted,
   });
 
   const handleSend = useCallback(async () => {
@@ -194,12 +233,12 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
     setCompose('');
 
     try {
-      const { thread, message } = await sendMessage(activeUserId, optimisticMessage.body);
+      const { thread, message, clientRef } = await sendMessage(activeUserId, optimisticMessage.body, clientId);
       handleIncomingMessage({
         thread,
         message: { ...message, clientId, deliveryState: message.readAt ? 'read' : 'sent' },
         otherUserId: activeUserId,
-        clientId,
+        clientId: clientRef ?? clientId,
       });
       setActiveThread(thread);
       requestAnimationFrame(() => {
@@ -420,7 +459,7 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
                 <MatchCard match={match} />
                 <PrimaryButton
                   label={match.otherUserName ? `Message ${match.otherUserName}` : 'Open chat'}
-                  onPress={() => match.otherUserId && openConversation(match.otherUserId)}
+                  onPress={() => { if (match.otherUserId) { void openConversation(match.otherUserId); } }}
                 />
               </View>
             ))}
@@ -662,3 +701,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
+

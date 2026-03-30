@@ -7,18 +7,35 @@ export interface PushTokenPayload {
 }
 
 export interface NotificationPreview {
-  id: string;
+  id: number;
   title: string;
-  body: string;
+  body: string | null;
   created_at: string;
+  is_read?: boolean;
+}
+
+interface NotificationsResponse {
+  ok: boolean;
+  items?: {
+    id: number;
+    title: string;
+    body: string | null;
+    created_at: string;
+    is_read?: boolean;
+  }[];
+  error?: string;
 }
 
 export function registerPushToken(payload: PushTokenPayload) {
   return apiClient.post<{ ok: boolean }>('/mobile/register-token.php', payload);
 }
 
-export function fetchNotificationPreviews() {
-  return apiClient.get<NotificationPreview[]>('/notifications/recent.php');
+export async function fetchNotificationPreviews(limit = 5) {
+  const response = await apiClient.get<NotificationsResponse>(`/notifications.php?limit=${limit}`);
+  if (!response.ok) {
+    throw new Error(response.error ?? 'Unable to load notifications.');
+  }
+  return response.items ?? [];
 }
 
 export async function savePushSubscription(payload: {

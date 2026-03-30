@@ -35,7 +35,7 @@ type ThreadsResponse = {
   threads: ServerThread[];
 };
 
-type ServerThread = {
+export type ServerThread = {
   id: number;
   other_user?: {
     id: number;
@@ -70,7 +70,7 @@ type ThreadResponse = {
   };
 };
 
-type ServerMessage = {
+export type ServerMessage = {
   id: number;
   sender_user_id: number;
   body: string;
@@ -82,6 +82,7 @@ type SendResponse = {
   ok: boolean;
   thread: ServerThread;
   message: ServerMessage;
+  client_ref?: string | null;
   recipient?: {
     id: number;
     display_name?: string | null;
@@ -93,7 +94,7 @@ type ActionResponse = {
   ok: boolean;
 };
 
-function mapMessage(row: ServerMessage): Message {
+export function mapMessage(row: ServerMessage): Message {
   return {
     id: row.id,
     senderId: row.sender_user_id,
@@ -104,7 +105,7 @@ function mapMessage(row: ServerMessage): Message {
   };
 }
 
-function mapThread(row: ServerThread): MessageThread {
+export function mapThread(row: ServerThread): MessageThread {
   return {
     id: row.id,
     otherUser: {
@@ -161,7 +162,11 @@ export async function fetchConversation(
   };
 }
 
-export async function sendMessage(recipientId: number, body: string): Promise<{ thread: MessageThread; message: Message }> {
+export async function sendMessage(
+  recipientId: number,
+  body: string,
+  clientRef?: string,
+): Promise<{ thread: MessageThread; message: Message; clientRef?: string | null }> {
   const csrf = getCsrfToken();
   if (!csrf) {
     throw new Error('Please log in to send messages.');
@@ -171,11 +176,13 @@ export async function sendMessage(recipientId: number, body: string): Promise<{ 
     recipient_id: recipientId,
     body,
     csrf,
+    client_ref: clientRef,
   });
 
   return {
     thread: mapThread(response.thread),
     message: mapMessage(response.message),
+    clientRef: response.client_ref ?? clientRef ?? null,
   };
 }
 

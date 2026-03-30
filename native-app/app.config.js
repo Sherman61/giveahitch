@@ -73,9 +73,10 @@ module.exports = () => {
       },
       plugins: ["expo-notifications", "expo-dev-client"],
       extra: {
+        ...extra,
         eas: {
-          projectId: "ed67a7c8-85af-457c-a459-f40ddcdd31b7",
-          owner: "shiyas-expo-apps",
+          projectId: expoProjectId ?? "ed67a7c8-85af-457c-a459-f40ddcdd31b7",
+          owner: expoOwner,
         },
       },
     },

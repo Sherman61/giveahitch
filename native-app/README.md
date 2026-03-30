@@ -9,12 +9,18 @@ React Native (Expo) client for the GlitchaHitch platform. The goal is to mirror 
    npm install
    ```
 2. Create a `.env` file (see `.env.example`) with the API origin and Expo project ID.
-3. Run locally:
+3. Mobile chat signs in through `GET /api/ws_auth.php`, so keep `WS_BROADCAST_SECRET` on the backend only and make sure the app can reuse the logged-in PHP session cookie.
+4. Run locally:
    ```bash
    npm run start      # opens Expo dev server
    npm run android    # builds for Android (needs emulator/device)
    npm run ios        # builds for iOS (macOS + Xcode)
    ```
+
+## Realtime Chat
+- The app fetches `/api/ws_auth.php` after login/session is ready and uses the returned `ws_url` plus short-lived `ws_auth` token to authenticate with Socket.IO.
+- The native client connects with `path: '/socket.io'` and `transports: ['websocket', 'polling']`, which keeps the setup compatible with Expo Go and stricter mobile carriers.
+- If chat does not connect, verify `WS_URL` is set on the server and that the same backend session works for both `/api/profile.php` and `/api/ws_auth.php`.
 
 ## Notifications
 - Uses `expo-notifications` for cross-platform push handling.
