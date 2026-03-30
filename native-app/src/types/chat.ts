@@ -17,6 +17,7 @@ export interface SocketAuthAck {
   ok: boolean;
   userId?: number;
   rooms?: string[];
+  online_user_ids?: number[];
 }
 
 export interface ChatConnectionStatus {
@@ -97,6 +98,7 @@ export interface ChatSocketEventMap {
   'dm:new': DmNewPayload;
   'dm:typing': DmTypingPayload;
   'dm:presence': DmPresencePayload;
+  'dm:presence_snapshot': number[];
   'dm:read': DmReadPayload;
   'dm:delete': DmDeletePayload;
 }
