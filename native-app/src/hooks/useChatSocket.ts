@@ -111,6 +111,25 @@ export function useChatSocket({
       }
     });
 
+
+    const unsubscribePresenceSnapshot = manager.subscribe('dm:presence_snapshot', (onlineUserIds) => {
+      if (onlineUserIds.length === 0) {
+        return;
+      }
+
+      setPresenceByUserId((previous) => {
+        const next = { ...previous };
+        onlineUserIds.forEach((id) => {
+          const targetId = Number(id || 0);
+          if (!targetId) {
+            return;
+          }
+          next[targetId] = true;
+        });
+        return next;
+      });
+    });
+
     const unsubscribePresence = manager.subscribe('dm:presence', (payload) => {
       const targetId = Number(payload.user_id || 0);
       if (!targetId) {
@@ -158,6 +177,7 @@ export function useChatSocket({
       unsubscribeConnection();
       unsubscribeNew();
       unsubscribeTyping();
+      unsubscribePresenceSnapshot();
       unsubscribePresence();
       unsubscribeRead();
       unsubscribeDelete();

@@ -28,6 +28,7 @@ class ChatSocketManager {
     'dm:new': new Set(),
     'dm:typing': new Set(),
     'dm:presence': new Set(),
+    'dm:presence_snapshot': new Set(),
     'dm:read': new Set(),
     'dm:delete': new Set(),
   };
@@ -162,6 +163,15 @@ class ChatSocketManager {
       if (ack?.ok) {
         this.authenticated = true;
         this.emit('connection', { state: 'connected', authenticated: true });
+
+        const selfUserId = Number(ack.userId || auth.ws_auth.userId || 0);
+        const onlineUserIds = (ack.online_user_ids ?? [])
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id > 0 && id !== selfUserId);
+
+        if (onlineUserIds.length > 0) {
+          this.emit('dm:presence_snapshot', onlineUserIds);
+        }
         return;
       }
 
