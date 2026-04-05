@@ -1,8 +1,22 @@
 /node_modules
-
+node_modules
+/native-app/node_modules
 /config
 .env
+/native-app/.env
+.env.*
+!.env.example
+/native-app/.env.*
+!/native-app/.env.example
 /ws/node_modules.env
 /ws/node_modules
 # Ignore Socket.IO workspace deps
 ws/node_modules/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist

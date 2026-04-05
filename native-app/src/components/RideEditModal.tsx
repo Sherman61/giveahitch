@@ -214,7 +214,7 @@ export const RideEditModal: FC<Props> = ({ ride, visible, onClose, onSaved }) =>
 
             {formError && <Text style={styles.error}>{formError}</Text>}
 
-            <PrimaryButton label={saving ? 'Savingâ€¦' : 'Save changes'} onPress={handleSave} />
+            <PrimaryButton label={saving ? 'Saving…' : 'Save changes'} onPress={handleSave} />
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

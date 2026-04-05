@@ -22,7 +22,7 @@ export const HeaderBar: FC<Props> = ({ activeTab, onMenuSelect, onLogout, menuIt
     <View style={styles.container}>
       <Text style={styles.title}>GlitchaHitch</Text>
       <TouchableOpacity style={styles.menuButton} onPress={() => setOpen(true)}>
-        <Text style={styles.menuText}>⋮</Text>
+        <Text style={styles.menuText}>?</Text>
       </TouchableOpacity>
 
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>

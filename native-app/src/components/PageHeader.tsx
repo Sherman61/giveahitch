@@ -5,7 +5,7 @@ import { radius, spacing } from '@/constants/layout';
 
 interface Props {
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   backLabel?: string;
   onBack?: () => void;
   rightAccessory?: ReactNode;
@@ -25,7 +25,7 @@ export const PageHeader: FC<Props> = ({ title, subtitle, backLabel = 'Back', onB
         {rightAccessory ? <View style={styles.rightAccessory}>{rightAccessory}</View> : <View />}
       </View>
       <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {subtitle ? (typeof subtitle === 'string' ? <Text style={styles.subtitle}>{subtitle}</Text> : <View>{subtitle}</View>) : null}
     </View>
   );
 };

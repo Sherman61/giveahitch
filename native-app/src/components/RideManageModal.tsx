@@ -133,7 +133,7 @@ export const RideManageModal: FC<Props> = ({
               {ride.origin} {'->'} {ride.destination}
             </Text>
             <Text style={styles.summaryMeta}>
-              {ride.type === 'offer' ? 'Offer' : 'Request'} Â· {ride.status.toUpperCase()}
+              {ride.type === 'offer' ? 'Offer' : 'Request'} · {ride.status.toUpperCase()}
             </Text>
             <Text style={styles.summaryMeta}>{responderLabel}</Text>
             <PrimaryButton label="Refresh responses" onPress={handleRefresh} variant="secondary" />
@@ -144,7 +144,7 @@ export const RideManageModal: FC<Props> = ({
           {loading && (
             <View style={styles.loadingRow}>
               <ActivityIndicator />
-              <Text style={styles.loadingText}>Loading responsesâ€¦</Text>
+              <Text style={styles.loadingText}>Loading responses…</Text>
             </View>
           )}
 
@@ -204,7 +204,7 @@ export const RideManageModal: FC<Props> = ({
             <PrimaryButton label="Edit ride" onPress={() => onEdit(ride)} />
             <TouchableOpacity onPress={handleDelete} disabled={deleting}>
               <Text style={[styles.deleteText, deleting && styles.disabledDelete]}>
-                {deleting ? 'Deletingâ€¦' : 'Delete ride'}
+                {deleting ? 'Deleting…' : 'Delete ride'}
               </Text>
             </TouchableOpacity>
           </View>
