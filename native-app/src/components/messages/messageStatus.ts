@@ -4,6 +4,7 @@ type ConversationPresenceOptions = {
   activeUserId: number | null;
   activeLastSeenAt: string | null;
   connectionState: string;
+  hasPresenceSnapshot: boolean;
   isActiveUserOnline: boolean;
   isTyping: boolean;
 };
@@ -12,6 +13,7 @@ export function getConversationPresenceText({
   activeUserId,
   activeLastSeenAt,
   connectionState,
+  hasPresenceSnapshot,
   isActiveUserOnline,
   isTyping,
 }: ConversationPresenceOptions): string {
@@ -33,6 +35,10 @@ export function getConversationPresenceText({
 
   if (activeLastSeenAt) {
     return `Last online ${dayjs(activeLastSeenAt).fromNow()}`;
+  }
+
+  if (connectionState === 'connected' && hasPresenceSnapshot) {
+    return 'Offline';
   }
 
   if (connectionState === 'connecting' || connectionState === 'connected') {

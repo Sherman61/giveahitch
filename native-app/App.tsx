@@ -18,6 +18,7 @@ import { PushNotificationTestScreen } from './src/screens/admin/PushNotification
 import { AccountScreen } from './src/screens/AccountScreen';
 import { palette } from './src/constants/colors';
 import { heartbeatPresence } from './src/api/presence';
+import { useScreenAnalytics } from './src/hooks/useScreenAnalytics';
 
 type PrimaryTab = 'browse' | 'myRides' | 'post' | 'messages';
 type SecondaryRoute = 'alerts' | 'account' | 'profile' | 'settings' | 'rate' | 'adminPush' | null;
@@ -36,6 +37,41 @@ function AppContent() {
 
   const isAuthenticated = Boolean(auth?.user);
   const currentUser = auth?.user ?? null;
+  const appScreenName = useMemo(() => {
+    if (secondaryRoute) {
+      switch (secondaryRoute) {
+        case 'alerts':
+          return 'AlertsScreen';
+        case 'account':
+          return isAuthenticated ? 'AccountScreen' : 'LoginScreen';
+        case 'profile':
+          return 'ProfileScreen';
+        case 'settings':
+          return 'SettingsScreen';
+        case 'rate':
+          return 'RateRidesScreen';
+        case 'adminPush':
+          return 'PushNotificationTestScreen';
+        default:
+          return 'UnknownScreen';
+      }
+    }
+
+    switch (activeTab) {
+      case 'browse':
+        return 'RidesScreen';
+      case 'myRides':
+        return 'MyRidesScreen';
+      case 'post':
+        return 'PostRideScreen';
+      case 'messages':
+        return 'MessagesScreen';
+      default:
+        return 'RidesScreen';
+    }
+  }, [activeTab, isAuthenticated, secondaryRoute]);
+
+  useScreenAnalytics(appScreenName);
 
   useEffect(() => {
     if (!isAuthenticated) {

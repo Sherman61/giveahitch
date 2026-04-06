@@ -20,6 +20,7 @@ class ChatSocketManager {
   private wsUrl: string | null = null;
   private sessionEnabled = false;
   private authenticated = false;
+  private presenceSnapshotLoaded = false;
   private authRequest: Promise<WsAuthResponse> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners: {
@@ -60,6 +61,7 @@ class ChatSocketManager {
   disconnect() {
     this.sessionEnabled = false;
     this.authenticated = false;
+    this.presenceSnapshotLoaded = false;
     this.authRequest = null;
     this.clearReconnectTimer();
     if (this.socket) {
@@ -68,7 +70,7 @@ class ChatSocketManager {
       this.socket = null;
     }
     this.wsUrl = null;
-    this.emit('connection', { state: 'idle', authenticated: false });
+    this.emit('connection', { state: 'idle', authenticated: false, presenceSnapshotLoaded: false });
   }
 
   emitTyping(recipientId: number, threadId: number | null, typing: boolean) {
@@ -122,9 +124,11 @@ class ChatSocketManager {
 
     socket.on('disconnect', () => {
       this.authenticated = false;
+      this.presenceSnapshotLoaded = false;
       this.emit('connection', {
         state: this.sessionEnabled ? 'disconnected' : 'idle',
         authenticated: false,
+        presenceSnapshotLoaded: false,
       });
       if (this.sessionEnabled) {
         this.scheduleReconnect();
@@ -170,6 +174,7 @@ class ChatSocketManager {
 
       if (ack?.ok) {
         this.authenticated = true;
+        this.presenceSnapshotLoaded = true;
         console.log('[messages-debug] socket-auth-ack', {
           userId: ack.userId ?? null,
           rooms: ack.rooms ?? [],
@@ -188,7 +193,11 @@ class ChatSocketManager {
           });
         });
         this.clearReconnectTimer();
-        this.emit('connection', { state: 'connected', authenticated: true });
+        this.emit('connection', {
+          state: 'connected',
+          authenticated: true,
+          presenceSnapshotLoaded: true,
+        });
         return;
       }
 
@@ -220,7 +229,11 @@ class ChatSocketManager {
   }
 
   private setConnectionState(state: ChatConnectionState) {
-    this.emit('connection', { state, authenticated: this.authenticated });
+    this.emit('connection', {
+      state,
+      authenticated: this.authenticated,
+      presenceSnapshotLoaded: this.presenceSnapshotLoaded,
+    });
   }
 
   private handleConnectionError(error: unknown) {
@@ -229,6 +242,7 @@ class ChatSocketManager {
     const status: ChatConnectionStatus = {
       state: 'error',
       authenticated: false,
+      presenceSnapshotLoaded: this.presenceSnapshotLoaded,
       error: message,
     };
     this.emit('connection', status);

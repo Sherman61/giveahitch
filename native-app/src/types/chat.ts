@@ -23,6 +23,7 @@ export interface SocketAuthAck {
 export interface ChatConnectionStatus {
   state: ChatConnectionState;
   authenticated: boolean;
+  presenceSnapshotLoaded?: boolean;
   error?: string;
 }
 

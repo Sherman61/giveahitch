@@ -265,7 +265,7 @@ export function useMessagesController({ user, refreshMatches }: Options) {
     [activeUserId],
   );
 
-  const { connectionState, presenceByUserId, lastSeenAtByUserId, typingByUserId, setTyping, markRead } =
+  const { connectionState, hasPresenceSnapshot, presenceByUserId, lastSeenAtByUserId, typingByUserId, setTyping, markRead } =
     useChatSocket({
       userId: user?.id ?? null,
       activeUserId,
@@ -331,10 +331,11 @@ export function useMessagesController({ user, refreshMatches }: Options) {
         activeUserId,
         activeLastSeenAt,
         connectionState,
+        hasPresenceSnapshot,
         isActiveUserOnline,
         isTyping,
       }),
-    [activeLastSeenAt, activeUserId, connectionState, isActiveUserOnline, isTyping],
+    [activeLastSeenAt, activeUserId, connectionState, hasPresenceSnapshot, isActiveUserOnline, isTyping],
   );
 
   const logConversationSignalSnapshot = useCallback(
@@ -350,6 +351,7 @@ export function useMessagesController({ user, refreshMatches }: Options) {
         reason,
         activeUserId,
         connectionState,
+        hasPresenceSnapshot,
         rawPresenceOnline: rawPresence ?? null,
         resolvedOnlineState: isActiveUserOnline ? 'online' : 'not_confirmed_online',
         rawTyping: rawTyping ?? false,
@@ -372,6 +374,7 @@ export function useMessagesController({ user, refreshMatches }: Options) {
       activeUserId,
       canMessage,
       connectionState,
+      hasPresenceSnapshot,
       isActiveUserOnline,
       isTyping,
       lastSeenAtByUserId,

@@ -42,6 +42,7 @@ export function useChatSocket({
 }: Options) {
   const manager = getChatSocketManager();
   const [connectionState, setConnectionState] = useState<ChatConnectionState>('idle');
+  const [hasPresenceSnapshot, setHasPresenceSnapshot] = useState(false);
   const [presenceByUserId, setPresenceByUserId] = useState<Record<number, boolean>>({});
   const [lastSeenAtByUserId, setLastSeenAtByUserId] = useState<Record<number, string | null>>({});
   const [typingByUserId, setTypingByUserId] = useState<Record<number, boolean>>({});
@@ -54,6 +55,7 @@ export function useChatSocket({
     if (!userId) {
       manager.disconnect();
       setConnectionState('idle');
+      setHasPresenceSnapshot(false);
       setPresenceByUserId({});
       setLastSeenAtByUserId({});
       setTypingByUserId({});
@@ -68,11 +70,13 @@ export function useChatSocket({
       console.log('[messages-debug] socket-connection', {
         state: status.state,
         authenticated: status.authenticated,
+        presenceSnapshotLoaded: status.presenceSnapshotLoaded ?? false,
         error: 'error' in status ? status.error ?? null : null,
         activeUserId,
         activeThreadId,
       });
       setConnectionState(status.state);
+      setHasPresenceSnapshot(Boolean(status.presenceSnapshotLoaded));
     });
 
     const unsubscribeNew = manager.subscribe('dm:new', (payload) => {
@@ -223,6 +227,7 @@ export function useChatSocket({
   return useMemo(
     () => ({
       connectionState,
+      hasPresenceSnapshot,
       isConnected: connectionState === 'connected',
       presenceByUserId,
       lastSeenAtByUserId,
@@ -230,6 +235,6 @@ export function useChatSocket({
       setTyping,
       markRead,
     }),
-    [connectionState, lastSeenAtByUserId, markRead, presenceByUserId, setTyping, typingByUserId],
+    [connectionState, hasPresenceSnapshot, lastSeenAtByUserId, markRead, presenceByUserId, setTyping, typingByUserId],
   );
 }

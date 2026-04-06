@@ -3,6 +3,7 @@ import { ChatsScreen } from '@/screens/ChatsScreen';
 import { MessageScreen } from '@/screens/MessageScreen';
 import { useMessagesController } from '@/hooks/useMessagesController';
 import { useMyMatches } from '@/hooks/useMyMatches';
+import { useScreenAnalytics } from '@/hooks/useScreenAnalytics';
 import type { UserProfile } from '@/types/user';
 
 interface Props {
@@ -38,6 +39,8 @@ export const MessagesScreen: FC<Props> = ({ user, onRequestLogin, onOpenAccount 
     user,
     refreshMatches,
   });
+
+  useScreenAnalytics(activeThread ? 'MessageConversationScreen' : 'MessagesInboxScreen');
 
   if (activeThread) {
     return (
