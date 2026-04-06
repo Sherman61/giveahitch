@@ -60,6 +60,7 @@ export const LoginScreen: FC<Props> = ({ currentUser, onLoginSuccess, onLogout, 
         <TextInput
           style={styles.input}
           placeholder="Email"
+          placeholderTextColor={palette.inputPlaceholder}
           autoCapitalize="none"
           keyboardType="email-address"
           value={email}
@@ -68,6 +69,7 @@ export const LoginScreen: FC<Props> = ({ currentUser, onLoginSuccess, onLogout, 
         <TextInput
           style={styles.input}
           placeholder="Password"
+          placeholderTextColor={palette.inputPlaceholder}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
@@ -103,6 +105,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: spacing.sm,
     backgroundColor: palette.surface,
+    color: palette.text,
   },
   error: {
     color: palette.danger,

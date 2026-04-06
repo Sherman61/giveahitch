@@ -7,4 +7,5 @@ export const palette = {
   background: '#f8f9fa',
   text: '#212529',
   muted: '#6c757d',
+  inputPlaceholder: '#7a8694',
 };

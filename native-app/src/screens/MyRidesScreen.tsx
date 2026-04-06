@@ -39,6 +39,7 @@ export const MyRidesScreen: FC<Props> = ({
   const { matchesByRideId, matchesList } = useMyMatches(user ?? null);
   const [managedRide, setManagedRide] = useState<RideSummary | null>(null);
   const [editingRide, setEditingRide] = useState<RideSummary | null>(null);
+  const [refreshSignal, setRefreshSignal] = useState(0);
   const { lastNotification } = useNotifications();
   const { unreadCount } = useAlerts(Boolean(user?.id));
 
@@ -49,11 +50,13 @@ export const MyRidesScreen: FC<Props> = ({
   const handleExploreRides = useCallback(() => onOpenBrowse(), [onOpenBrowse]);
   const handleRideUpdated = useCallback(() => {
     refresh();
+    setRefreshSignal((current) => current + 1);
   }, [refresh]);
 
   const handleRideDeleted = useCallback(() => {
     setManagedRide(null);
     refresh();
+    setRefreshSignal((current) => current + 1);
   }, [refresh]);
 
   const closeManage = useCallback(() => setManagedRide(null), []);
@@ -62,6 +65,7 @@ export const MyRidesScreen: FC<Props> = ({
   useEffect(() => {
     if (lastNotification) {
       refresh();
+      setRefreshSignal((current) => current + 1);
     }
   }, [lastNotification, refresh]);
 
@@ -125,6 +129,7 @@ export const MyRidesScreen: FC<Props> = ({
         onEdit={(ride) => setEditingRide(ride)}
         onRideUpdated={handleRideUpdated}
         onRideDeleted={handleRideDeleted}
+        refreshSignal={refreshSignal}
         onNavigate={(key) => {
           if (key === 'messages') onOpenMessages();
           if (key === 'rides') onOpenBrowse();

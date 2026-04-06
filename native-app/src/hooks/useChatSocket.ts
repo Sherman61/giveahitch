@@ -43,6 +43,7 @@ export function useChatSocket({
   const manager = getChatSocketManager();
   const [connectionState, setConnectionState] = useState<ChatConnectionState>('idle');
   const [presenceByUserId, setPresenceByUserId] = useState<Record<number, boolean>>({});
+  const [lastSeenAtByUserId, setLastSeenAtByUserId] = useState<Record<number, string | null>>({});
   const [typingByUserId, setTypingByUserId] = useState<Record<number, boolean>>({});
   const typingTimeoutsRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const callbacksRef = useRef({ onIncomingMessage, onMessagesRead, onMessagesDeleted });
@@ -54,6 +55,7 @@ export function useChatSocket({
       manager.disconnect();
       setConnectionState('idle');
       setPresenceByUserId({});
+      setLastSeenAtByUserId({});
       setTypingByUserId({});
       Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
       typingTimeoutsRef.current = {};
@@ -63,6 +65,13 @@ export function useChatSocket({
     manager.connect();
 
     const unsubscribeConnection = manager.subscribe('connection', (status) => {
+      console.log('[messages-debug] socket-connection', {
+        state: status.state,
+        authenticated: status.authenticated,
+        error: 'error' in status ? status.error ?? null : null,
+        activeUserId,
+        activeThreadId,
+      });
       setConnectionState(status.state);
     });
 
@@ -88,6 +97,12 @@ export function useChatSocket({
     });
 
     const unsubscribeTyping = manager.subscribe('dm:typing', (payload) => {
+      console.log('[messages-debug] socket-typing-event', {
+        payload,
+        activeUserId,
+        expectedRecipientId: userId,
+      });
+
       if (Number(payload.recipient_id || 0) !== userId) {
         return;
       }
@@ -112,15 +127,29 @@ export function useChatSocket({
     });
 
     const unsubscribePresence = manager.subscribe('dm:presence', (payload) => {
+      console.log('[messages-debug] socket-presence-event', {
+        payload,
+        activeUserId,
+      });
+
       const targetId = Number(payload.user_id || 0);
       if (!targetId) {
         return;
       }
 
       setPresenceByUserId((previous) => ({ ...previous, [targetId]: !!payload.online }));
+      setLastSeenAtByUserId((previous) => ({
+        ...previous,
+        [targetId]: payload.last_seen_at ?? previous[targetId] ?? null,
+      }));
     });
 
     const unsubscribeRead = manager.subscribe('dm:read', (payload) => {
+      console.log('[messages-debug] socket-read-event', {
+        payload,
+        activeUserId,
+      });
+
       const readerUserId = Number(payload.reader_id || 0);
       if (!readerUserId) {
         return;
@@ -139,6 +168,11 @@ export function useChatSocket({
     });
 
     const unsubscribeDelete = manager.subscribe('dm:delete', (payload) => {
+      console.log('[messages-debug] socket-delete-event', {
+        payload,
+        activeUserId,
+      });
+
       if (!payload.target_user_ids.includes(userId)) {
         return;
       }
@@ -191,10 +225,11 @@ export function useChatSocket({
       connectionState,
       isConnected: connectionState === 'connected',
       presenceByUserId,
+      lastSeenAtByUserId,
       typingByUserId,
       setTyping,
       markRead,
     }),
-    [connectionState, markRead, presenceByUserId, setTyping, typingByUserId],
+    [connectionState, lastSeenAtByUserId, markRead, presenceByUserId, setTyping, typingByUserId],
   );
 }

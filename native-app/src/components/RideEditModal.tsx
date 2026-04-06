@@ -3,7 +3,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -13,6 +12,7 @@ import {
   View,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import dayjs from 'dayjs';
 import { RideSummary } from '@/types/rides';
 import { updateRide } from '@/api/rides';
@@ -155,12 +155,14 @@ export const RideEditModal: FC<Props> = ({ ride, visible, onClose, onSaved }) =>
             <TextInput
               style={styles.input}
               placeholder="From"
+              placeholderTextColor={palette.inputPlaceholder}
               value={fromText}
               onChangeText={setFromText}
             />
             <TextInput
               style={styles.input}
               placeholder="To"
+              placeholderTextColor={palette.inputPlaceholder}
               value={toText}
               onChangeText={setToText}
             />
@@ -177,6 +179,7 @@ export const RideEditModal: FC<Props> = ({ ride, visible, onClose, onSaved }) =>
                 <Text style={styles.label}>Seats</Text>
                 <TextInput
                   style={styles.input}
+                  placeholderTextColor={palette.inputPlaceholder}
                   keyboardType="numeric"
                   value={seats}
                   onChangeText={setSeats}
@@ -192,6 +195,7 @@ export const RideEditModal: FC<Props> = ({ ride, visible, onClose, onSaved }) =>
             <TextInput
               style={styles.input}
               placeholder="Phone (+1 718 555 1234)"
+              placeholderTextColor={palette.inputPlaceholder}
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
@@ -199,6 +203,7 @@ export const RideEditModal: FC<Props> = ({ ride, visible, onClose, onSaved }) =>
             <TextInput
               style={styles.input}
               placeholder="WhatsApp (+1 347 555 7890)"
+              placeholderTextColor={palette.inputPlaceholder}
               value={whatsapp}
               onChangeText={setWhatsapp}
               keyboardType="phone-pad"
@@ -206,6 +211,7 @@ export const RideEditModal: FC<Props> = ({ ride, visible, onClose, onSaved }) =>
             <TextInput
               style={[styles.input, styles.multiline]}
               placeholder="Notes (optional)"
+              placeholderTextColor={palette.inputPlaceholder}
               value={notes}
               onChangeText={setNotes}
               multiline
@@ -214,7 +220,7 @@ export const RideEditModal: FC<Props> = ({ ride, visible, onClose, onSaved }) =>
 
             {formError && <Text style={styles.error}>{formError}</Text>}
 
-            <PrimaryButton label={saving ? 'Saving…' : 'Save changes'} onPress={handleSave} />
+            <PrimaryButton label={saving ? 'Saving...' : 'Save changes'} onPress={handleSave} />
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -284,6 +290,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     backgroundColor: palette.surface,
+    color: palette.text,
   },
   multiline: {
     minHeight: 80,

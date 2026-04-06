@@ -50,7 +50,7 @@ module.exports = () => {
       scheme: "glitchahitch",
       version: "0.1.0",
       orientation: "portrait",
-      icon: "./assets/adaptive-icon.png",
+      icon: "./assets/icon.png",
       userInterfaceStyle: "automatic",
       splash: {
         image: "./assets/splash.png",
@@ -66,7 +66,7 @@ module.exports = () => {
       android: {
         package: "com.glitchahitch.app",
         adaptiveIcon: {
-          foregroundImage: "./assets/adaptive-icon.png",
+          foregroundImage: "./assets/icon.png",
           backgroundColor: "#ffffff",
         },
         ...(hasGoogleServicesFile ? { googleServicesFile } : {}),

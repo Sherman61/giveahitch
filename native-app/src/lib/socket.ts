@@ -21,6 +21,7 @@ class ChatSocketManager {
   private sessionEnabled = false;
   private authenticated = false;
   private authRequest: Promise<WsAuthResponse> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners: {
     [K in keyof ChatSocketEventMap]: Set<Listener<ChatSocketEventMap[K]>>;
   } = {
@@ -41,10 +42,14 @@ class ChatSocketManager {
 
   connect() {
     this.sessionEnabled = true;
+    this.clearReconnectTimer();
     if (this.socket) {
       if (!this.socket.connected) {
         this.setConnectionState('connecting');
         this.socket.connect();
+      } else if (!this.authenticated) {
+        this.setConnectionState('connecting');
+        void this.authenticate(this.socket, true);
       }
       return;
     }
@@ -56,6 +61,7 @@ class ChatSocketManager {
     this.sessionEnabled = false;
     this.authenticated = false;
     this.authRequest = null;
+    this.clearReconnectTimer();
     if (this.socket) {
       this.socket.removeAllListeners();
       this.socket.disconnect();
@@ -120,6 +126,9 @@ class ChatSocketManager {
         state: this.sessionEnabled ? 'disconnected' : 'idle',
         authenticated: false,
       });
+      if (this.sessionEnabled) {
+        this.scheduleReconnect();
+      }
     });
 
     socket.on('dm:new', (payload: DmNewPayload) => {
@@ -161,6 +170,24 @@ class ChatSocketManager {
 
       if (ack?.ok) {
         this.authenticated = true;
+        console.log('[messages-debug] socket-auth-ack', {
+          userId: ack.userId ?? null,
+          rooms: ack.rooms ?? [],
+          onlineUserIds: ack.online_user_ids ?? [],
+        });
+        const onlineUserIds = Array.isArray(ack.online_user_ids) ? ack.online_user_ids : [];
+        onlineUserIds.forEach((id) => {
+          const numericId = Number(id);
+          if (!Number.isFinite(numericId) || numericId <= 0) {
+            return;
+          }
+
+          this.emit('dm:presence', {
+            user_id: numericId,
+            online: true,
+          });
+        });
+        this.clearReconnectTimer();
         this.emit('connection', { state: 'connected', authenticated: true });
         return;
       }
@@ -205,6 +232,44 @@ class ChatSocketManager {
       error: message,
     };
     this.emit('connection', status);
+    this.scheduleReconnect();
+  }
+
+  private scheduleReconnect() {
+    if (!this.sessionEnabled || this.reconnectTimer) {
+      return;
+    }
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+
+      if (!this.sessionEnabled) {
+        return;
+      }
+
+      if (this.socket) {
+        if (this.socket.connected) {
+          this.setConnectionState('connecting');
+          void this.authenticate(this.socket, true);
+          return;
+        }
+
+        this.setConnectionState('connecting');
+        this.socket.connect();
+        return;
+      }
+
+      void this.initializeSocket();
+    }, 2000);
+  }
+
+  private clearReconnectTimer() {
+    if (!this.reconnectTimer) {
+      return;
+    }
+
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
   }
 
   private emit<K extends keyof ChatSocketEventMap>(event: K, payload: ChatSocketEventMap[K]) {

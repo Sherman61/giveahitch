@@ -31,7 +31,7 @@ interface Props {
   onRideUpdated: () => void;
   onRideDeleted: () => void;
   onNavigate?: (key: string) => void;
-  refreshSignal: number;
+  refreshSignal?: number;
 }
 
 const siteUrl = getSiteBaseUrl();

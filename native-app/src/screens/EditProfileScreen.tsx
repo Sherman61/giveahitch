@@ -117,6 +117,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     backgroundColor: '#fff',
+    color: palette.text,
     marginBottom: spacing.sm,
   },
   row: {

@@ -11,7 +11,7 @@ import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import * as Application from "expo-application";
-import { registerPushToken, savePushSubscription } from "@/api/notifications";
+import { registerPushToken } from "@/api/notifications";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -163,13 +163,6 @@ function useNotificationsInternal(): NotificationsContextValue {
       device_id: deviceId,
       expo_push_token: token,
       platform: Platform.OS,
-    });
-
-    await savePushSubscription({
-      endpoint: token,
-      deviceId,
-      platform: Platform.OS,
-      userAgent: Device.modelName ?? undefined,
     });
 
     return token;

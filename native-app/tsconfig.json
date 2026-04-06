@@ -12,5 +12,6 @@
       "@/screens/*": ["src/screens/*"],
       "@/types/*": ["src/types/*"]
     }
-  }
+  },
+  "exclude": ["_android_build_temp"]
 }

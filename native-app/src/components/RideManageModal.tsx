@@ -4,13 +4,13 @@ import {
   Alert,
   Linking,
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { RideSummary } from '@/types/rides';
@@ -31,7 +31,7 @@ interface Props {
   onRideUpdated: () => void;
   onRideDeleted: () => void;
   onNavigate?: (key: string) => void;
-  refreshSignal: number;
+  refreshSignal?: number;
 }
 
 const siteUrl = getSiteBaseUrl();
@@ -133,7 +133,7 @@ export const RideManageModal: FC<Props> = ({
               {ride.origin} {'->'} {ride.destination}
             </Text>
             <Text style={styles.summaryMeta}>
-              {ride.type === 'offer' ? 'Offer' : 'Request'} · {ride.status.toUpperCase()}
+              {ride.type === 'offer' ? 'Offer' : 'Request'} ï¿½ {ride.status.toUpperCase()}
             </Text>
             <Text style={styles.summaryMeta}>{responderLabel}</Text>
             <PrimaryButton label="Refresh responses" onPress={handleRefresh} variant="secondary" />
@@ -144,7 +144,7 @@ export const RideManageModal: FC<Props> = ({
           {loading && (
             <View style={styles.loadingRow}>
               <ActivityIndicator />
-              <Text style={styles.loadingText}>Loading responses…</Text>
+              <Text style={styles.loadingText}>Loading responsesï¿½</Text>
             </View>
           )}
 
@@ -204,7 +204,7 @@ export const RideManageModal: FC<Props> = ({
             <PrimaryButton label="Edit ride" onPress={() => onEdit(ride)} />
             <TouchableOpacity onPress={handleDelete} disabled={deleting}>
               <Text style={[styles.deleteText, deleting && styles.disabledDelete]}>
-                {deleting ? 'Deleting…' : 'Delete ride'}
+                {deleting ? 'Deletingï¿½' : 'Delete ride'}
               </Text>
             </TouchableOpacity>
           </View>

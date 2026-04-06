@@ -7,6 +7,7 @@ export interface MessageThread {
     displayName?: string | null;
     username?: string | null;
     isOnline?: boolean;
+    lastOnline?: string | null;
   };
   lastMessageAt?: string | null;
   lastMessage?: Message;
@@ -41,6 +42,7 @@ export type ServerThread = {
     id: number;
     display_name?: string | null;
     username?: string | null;
+    last_online?: string | null;
   };
   last_message_at?: string | null;
   unread_count?: number;
@@ -67,6 +69,7 @@ type ThreadResponse = {
     id: number;
     display_name?: string | null;
     username?: string | null;
+    last_online?: string | null;
   };
 };
 
@@ -112,6 +115,7 @@ export function mapThread(row: ServerThread): MessageThread {
       id: row.other_user?.id ?? 0,
       displayName: row.other_user?.display_name ?? null,
       username: row.other_user?.username ?? null,
+      lastOnline: row.other_user?.last_online ?? null,
     },
     lastMessageAt: row.last_message_at,
     unreadCount: row.unread_count ?? 0,
@@ -157,6 +161,7 @@ export async function fetchConversation(
           id: response.other_user.id,
           displayName: response.other_user.display_name ?? null,
           username: response.other_user.username ?? null,
+          lastOnline: response.other_user.last_online ?? null,
         }
       : undefined,
   };

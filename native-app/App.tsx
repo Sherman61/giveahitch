@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import { NotificationsProvider } from './src/hooks/useNotifications';
 import { PushNotificationTestScreen } from './src/screens/admin/PushNotificationTestScreen';
 import { AccountScreen } from './src/screens/AccountScreen';
 import { palette } from './src/constants/colors';
+import { heartbeatPresence } from './src/api/presence';
 
 type PrimaryTab = 'browse' | 'myRides' | 'post' | 'messages';
 type SecondaryRoute = 'alerts' | 'account' | 'profile' | 'settings' | 'rate' | 'adminPush' | null;
@@ -35,6 +36,21 @@ function AppContent() {
 
   const isAuthenticated = Boolean(auth?.user);
   const currentUser = auth?.user ?? null;
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    void heartbeatPresence().catch(() => {});
+    const interval = setInterval(() => {
+      void heartbeatPresence().catch(() => {});
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isAuthenticated]);
 
   const shellActions = useMemo(
     () => ({

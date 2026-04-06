@@ -177,6 +177,7 @@ export const PostRideScreen: FC<Props> = ({
           <TextInput
             style={styles.input}
             placeholder="Seats (0 = package)"
+            placeholderTextColor={palette.inputPlaceholder}
             keyboardType="numeric"
             value={seats}
             onChangeText={setSeats}
@@ -184,12 +185,14 @@ export const PostRideScreen: FC<Props> = ({
           <TextInput
             style={styles.input}
             placeholder="From (e.g. Borough Park, Brooklyn)"
+            placeholderTextColor={palette.inputPlaceholder}
             value={fromText}
             onChangeText={setFromText}
           />
           <TextInput
             style={styles.input}
             placeholder="To (e.g. Monsey, NY)"
+            placeholderTextColor={palette.inputPlaceholder}
             value={toText}
             onChangeText={setToText}
           />
@@ -224,6 +227,7 @@ export const PostRideScreen: FC<Props> = ({
           <TextInput
             style={styles.input}
             placeholder="Phone (+1 718 555 1234)"
+            placeholderTextColor={palette.inputPlaceholder}
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
@@ -231,6 +235,7 @@ export const PostRideScreen: FC<Props> = ({
           <TextInput
             style={styles.input}
             placeholder="WhatsApp (+1 347 555 7890)"
+            placeholderTextColor={palette.inputPlaceholder}
             value={whatsapp}
             onChangeText={setWhatsapp}
             keyboardType="phone-pad"
@@ -239,6 +244,7 @@ export const PostRideScreen: FC<Props> = ({
           <TextInput
             style={[styles.input, styles.multiline]}
             placeholder="Notes (optional)"
+            placeholderTextColor={palette.inputPlaceholder}
             value={notes}
             onChangeText={setNotes}
             multiline
@@ -326,6 +332,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: spacing.sm,
     backgroundColor: palette.surface,
+    color: palette.text,
   },
   multiline: {
     height: 100,

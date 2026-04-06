@@ -27,7 +27,7 @@ interface NotificationsResponse {
 }
 
 export function registerPushToken(payload: PushTokenPayload) {
-  return apiClient.post<{ ok: boolean }>('/mobile/register-token.php', payload);
+  return apiClient.post<{ ok: boolean }>('/mobile/notifications/register-token.php', payload);
 }
 
 export async function fetchNotificationPreviews(limit = 5) {
@@ -65,7 +65,7 @@ export async function sendPushTestNotification(message?: string) {
   if (!csrf) {
     throw new Error('You must be logged in to trigger push tests.');
   }
-  return apiClient.post<{ ok: boolean; message?: string }>('/mobile/push-test.php', {
+  return apiClient.post<{ ok: boolean; message?: string }>('/mobile/notifications/push-test.php', {
     csrf,
     ...(message ? { message } : {}),
   });

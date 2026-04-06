@@ -17,6 +17,7 @@ export interface SocketAuthAck {
   ok: boolean;
   userId?: number;
   rooms?: string[];
+  online_user_ids?: number[];
 }
 
 export interface ChatConnectionStatus {
