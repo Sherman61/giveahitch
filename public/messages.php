@@ -59,6 +59,7 @@ $initialTarget = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
       overflow-y: auto;
       flex: 1;
       min-height: 0;
+      max-height: min(52vh, 560px);
     }
     .message-row {
       display: flex;
