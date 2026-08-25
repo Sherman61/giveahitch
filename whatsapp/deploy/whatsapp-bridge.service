@@ -13,6 +13,7 @@ Environment=HOST=127.0.0.1
 Environment=PORT=3000
 Environment=AUTH_DIR=/var/www/glitchahitch/whatsapp/auth-fresh
 Environment=TRACKED_GROUP_JIDS=120363429351723299@g.us
+EnvironmentFile=/etc/whatsapp-bridge.env
 ExecStart=/usr/bin/node /var/www/glitchahitch/whatsapp/src/index.js
 Restart=on-failure
 RestartSec=5

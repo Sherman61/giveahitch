@@ -42,6 +42,7 @@ $adminPages = \App\AdminPages\all();
         <a class="btn btn-outline-primary btn-sm" href="/admin/push.php"><i class="bi bi-broadcast-pin me-1"></i>Push notifications</a>
         <a class="btn btn-outline-success btn-sm" href="/whatsapp/" target="_blank" rel="noopener"><i class="bi bi-whatsapp me-1"></i>WhatsApp status</a>
         <a class="btn btn-success btn-sm" href="/admin/whatsapp.php"><i class="bi bi-send me-1"></i>Send rides</a>
+        <a class="btn btn-outline-success btn-sm" href="/admin/whatsapp_intakes.php"><i class="bi bi-chat-square-text me-1"></i>WhatsApp intake</a>
         <a class="btn btn-outline-secondary btn-sm" href="/rides.php"><i class="bi bi-arrow-left me-1"></i>Back to site</a>
       </div>
     </header>

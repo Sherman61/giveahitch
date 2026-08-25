@@ -15,4 +15,6 @@ export const config = Object.freeze({
   host: process.env.HOST || '127.0.0.1',
   port: positiveInteger(process.env.PORT, 3_000),
   trackedGroupJids: jidList(process.env.TRACKED_GROUP_JIDS),
+  internalWebsiteUrl: process.env.INTERNAL_WEBSITE_URL || 'https://glitchahitch.com',
+  internalApiToken: process.env.BRIDGE_INTERNAL_TOKEN || '',
 });
