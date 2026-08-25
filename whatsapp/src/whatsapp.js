@@ -41,9 +41,9 @@ async function handleGroupIntake(message) {
   const suggested = parseRideText(text);
   const result = await intakeApi('intake', { ride: { ...message, text, ...suggested } });
   const format = 'Format: @ridebot Looking from Kingston to Montego Bay 876-555-1234. You may add a note after the number.';
-  if (result.mode === 'manual') { await dm(message.senderJid, `Thanks — your ride was sent privately to the admin team for review.\n\n${format}`); return; }
-  if (!result.complete) { await dm(message.senderJid, `I can help finish your ride privately.\n\n${format}\n\nPlease send the missing details in a direct reply.`); return; }
-  await dm(message.senderJid, `Ride preview:\n${formatRide({ ...suggested })}\n\nReply CONFIRM to post it, or CANCEL to stop.`);
+  if (result.mode === 'manual') { await dm(message.senderJid, `Status: received — pending admin review.\n\n${format}`); return; }
+  if (!result.complete) { await dm(message.senderJid, `Status: more details needed.\n\n${format}\n\nPlease send the missing details in a direct reply.`); return; }
+  await dm(message.senderJid, `Status: awaiting your confirmation.\n\nRide preview:\n${formatRide({ ...suggested })}\n\nReply CONFIRM to post it, or CANCEL to stop.`);
 }
 
 function formatRide(ride) {
@@ -61,7 +61,6 @@ async function handlePrivateIntake(message) {
   if (pending.mode !== 'automatic') { await dm(message.senderJid, 'Your ride is awaiting admin review.'); return; }
   const messageId = await publishRideToWhatsApp({ ...intake, groupJid: intake.source_group_jid });
   await intakeApi('mark_posted', { id: intake.id, messageId });
-  await dm(message.senderJid, 'Your formatted ride has been posted to Test rides.');
 }
 
 async function groupNameFor(groupJid) {
@@ -183,5 +182,9 @@ export async function publishRideToWhatsApp(ride) {
   const groupJid = config.trackedGroupJids.includes(ride.groupJid) ? ride.groupJid : config.trackedGroupJids[0];
   if (!socket || !groupJid) throw new Error('WhatsApp is not connected');
   const sent = await socket.sendMessage(groupJid, { text: formatRide(ride) });
+  if (ride.source_sender_jid) {
+    try { await dm(ride.source_sender_jid, `Status: posted. Your ride is now live in Test rides.\n\n${formatRide(ride)}`); }
+    catch (error) { logger.warn({ error: error.message, senderJid: ride.source_sender_jid }, 'Could not send ride status update'); }
+  }
   return sent.key.id;
 }
