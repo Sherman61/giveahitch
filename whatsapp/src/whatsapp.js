@@ -37,10 +37,12 @@ function parseRideText(text) {
 async function dm(jid, text) { await socket.sendMessage(jid, { text }); }
 
 async function handleGroupIntake(message) {
-  const suggested = parseRideText(message.text);
-  const result = await intakeApi('intake', { ride: { ...message, ...suggested } });
-  if (result.mode === 'manual') { await dm(message.senderJid, 'Thanks — your ride was sent privately to the admin team for review. They may contact you if details are needed.'); return; }
-  if (!result.complete) { await dm(message.senderJid, 'I can help finish your ride privately. Reply with: LOOKING or OFFERING, then “From City to City”, plus a phone or WhatsApp number.'); return; }
+  const text = message.text.replace(/@ridebot\b/ig, '').trim();
+  const suggested = parseRideText(text);
+  const result = await intakeApi('intake', { ride: { ...message, text, ...suggested } });
+  const format = 'Format: @ridebot Looking from Kingston to Montego Bay 876-555-1234. You may add a note after the number.';
+  if (result.mode === 'manual') { await dm(message.senderJid, `Thanks — your ride was sent privately to the admin team for review.\n\n${format}`); return; }
+  if (!result.complete) { await dm(message.senderJid, `I can help finish your ride privately.\n\n${format}\n\nPlease send the missing details in a direct reply.`); return; }
   await dm(message.senderJid, `Ride preview:\n${formatRide({ ...suggested })}\n\nReply CONFIRM to post it, or CANCEL to stop.`);
 }
 
@@ -94,6 +96,7 @@ async function handleMessages({ messages, type }) {
     }
 
     dashboard.addGroupMessage(normalized);
+    if (!/@ridebot\b/i.test(normalized.text)) continue;
     await handleGroupIntake(normalized);
     logger.info({ messageId: normalized.messageId, groupJid: normalized.groupJid }, 'Incoming tracked group message');
   }
