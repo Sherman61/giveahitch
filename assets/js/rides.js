@@ -407,7 +407,7 @@ const render = (items) => {
               <span class="ride-pill ${cls}"><i class="bi ${cls === 'request' ? 'bi-hand-index-thumb' : 'bi-steering-wheel'}"></i>${item.type === 'offer' ? 'Offer' : 'Request'}</span>
               <span class="text-secondary small">by ${ownerHtml}${isOwn ? ' · <span class="badge text-bg-primary-subtle text-primary">Your post</span>' : ''}</span>
             </div>
-            <div class="fw-semibold fs-5 text-primary mb-2">${escapeHtml(item.from_text)} <span class="text-body-secondary">→</span> ${escapeHtml(item.to_text)}</div>
+            <div class="fw-semibold fs-5 text-primary mb-2">${escapeHtml(item.from_text)} <span class="text-body-secondary">→</span> ${escapeHtml(item.to_text)} ${item.created_via === 'whatsapp_bot' ? '<span class="badge text-bg-success ms-1"><i class="bi bi-robot"></i> Bot ride</span>' : ''}</div>
             <div class="ride-meta d-flex flex-wrap text-secondary small">
               ${scheduleHtml}
               <span><i class="bi bi-people me-1"></i>${seatsLabel}</span>

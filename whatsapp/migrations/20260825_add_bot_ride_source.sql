@@ -1,0 +1,1 @@
+ALTER TABLE rides ADD COLUMN created_via VARCHAR(32) NOT NULL DEFAULT 'website';

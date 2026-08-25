@@ -31,7 +31,7 @@ try {
     $sql = "SELECT
               r.id, r.user_id, r.type, r.from_text, r.to_text, r.ride_datetime, r.ride_end_datetime,
               r.seats, r.package_only, r.note, r.phone, r.whatsapp,
-              r.status, r.created_at,
+              r.status, r.created_at, r.created_via,
               u.display_name AS owner_display,
               u.contact_privacy AS owner_contact_privacy
             FROM rides r

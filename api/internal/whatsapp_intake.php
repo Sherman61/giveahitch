@@ -22,5 +22,5 @@ if ($action === 'pending_for_sender') {
 }
 if ($action === 'mark_confirmed') { $pdo->prepare("UPDATE whatsapp_ride_intakes SET intake_status='confirmed' WHERE id=?")->execute([(int)$input['id']]); output(['ok'=>true]); }
 if ($action === 'cancel') { $pdo->prepare("UPDATE whatsapp_ride_intakes SET intake_status='cancelled' WHERE id=?")->execute([(int)$input['id']]); output(['ok'=>true]); }
-if ($action === 'mark_posted') { $pdo->prepare("UPDATE whatsapp_ride_intakes SET intake_status='posted', last_error=NULL WHERE id=?")->execute([(int)$input['id']]); output(['ok'=>true]); }
+if ($action === 'mark_posted') { $q=$pdo->prepare('SELECT * FROM whatsapp_ride_intakes WHERE id=?');$q->execute([(int)$input['id']]);$r=$q->fetch();if(!$r)output(['ok'=>false],404);$pdo->prepare("INSERT INTO rides (user_id,type,from_text,to_text,note,phone,whatsapp,status,deleted,created_via,whatsapp_sent,whatsapp_sent_at,whatsapp_message_id,created_at,updated_at) VALUES (NULL,?,?,?,?,?,?, 'open',0,'whatsapp_bot',1,NOW(),?,NOW(),NOW())")->execute([$r['ride_type'],$r['from_text'],$r['to_text'],$r['note'],$r['phone'],$r['whatsapp'],$input['messageId']??null]);$pdo->prepare("UPDATE whatsapp_ride_intakes SET intake_status='posted', last_error=NULL WHERE id=?")->execute([(int)$input['id']]); output(['ok'=>true]); }
 output(['ok'=>false,'error'=>'Unknown action'],400);
