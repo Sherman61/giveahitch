@@ -83,7 +83,30 @@ if ($match) {
   } catch (\PDOException $e) {
     $pdo->rollBack();
     if ($e->getCode()==='23000') {
-      http_response_code(409); echo json_encode(['ok'=>false,'error'=>'duplicate']); exit;
+      /*
+       * Two tabs (or the post-login retry and a click) can both see no row,
+       * then race to insert it. The losing request should report the request
+       * which the winner just created, never an opaque duplicate error.
+       */
+      $race = $pdo->prepare("SELECT id, status FROM ride_matches
+        WHERE ride_id=:rid AND driver_user_id=:d AND passenger_user_id=:p
+        LIMIT 1");
+      $race->execute([
+        ':rid'=>$rideId,
+        ':d'=>$roleMap['driver_user_id'],
+        ':p'=>$roleMap['passenger_user_id'],
+      ]);
+      if ($created = $race->fetch(PDO::FETCH_ASSOC)) {
+        $createdStatus = strtolower((string)$created['status']);
+        echo json_encode([
+          'ok'=>true,
+          'status'=>$createdStatus === 'inprogress' ? 'in_progress' : $createdStatus,
+          'match_id'=>(int)$created['id'],
+          'already_requested'=>true,
+        ]);
+        exit;
+      }
+      http_response_code(409); echo json_encode(['ok'=>false,'error'=>'request_conflict']); exit;
     }
     http_response_code(500); echo json_encode(['ok'=>false,'error'=>'db']); exit;
   }
