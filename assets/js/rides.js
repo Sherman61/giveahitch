@@ -387,9 +387,10 @@ const render = (items) => {
     const ownerHtml = item.user_id
       ? `<a class="fw-semibold text-decoration-none" href="/user.php?id=${item.user_id}">${escapeHtml(ownerName)}</a>`
       : `<span class="fw-semibold">${escapeHtml(ownerName)}</span>`;
+    const isBotRide = item.created_via === 'whatsapp_bot' && !item.user_id;
     const isOwn = meId && item.user_id && Number(item.user_id) === meId;
     const ownMatchState = requestedRideLabel(item.viewer_match_status);
-    const showAccept = item.status === 'open' && (!item.user_id || Number(item.user_id) !== meId) && !ownMatchState;
+    const showAccept = !isBotRide && item.status === 'open' && (!item.user_id || Number(item.user_id) !== meId) && !ownMatchState;
     const note = item.note ? `<div class="text-body mt-2"><i class="bi bi-chat-dots me-2 text-primary"></i>${escapeHtml(item.note)}</div>` : '';
     const showReport = !isOwn;
 
@@ -416,7 +417,10 @@ const render = (items) => {
             ${note}
           </div>
           <div class="ride-actions text-md-end">
-            <div class="contact-links mb-3">${buildContactLinks(item)}</div>
+            <div class="contact-links mb-3">${isBotRide
+              ? '<span class="text-secondary"><i class="bi bi-whatsapp me-1"></i>Contact details are shared through the WhatsApp ride post.</span>'
+              : buildContactLinks(item)}</div>
+            ${isBotRide ? '<div class="small text-secondary mb-2"><i class="bi bi-robot me-1"></i>Bot ride — contact the rider in WhatsApp.</div>' : ''}
             ${showAccept ? `<button class="btn btn-success" data-accept="${item.id}"><i class="bi bi-check2-circle me-1"></i>Accept ride</button>` : ''}
             ${!showAccept && ownMatchState ? `<button class="${ownMatchState.className}" type="button" disabled><i class="bi ${ownMatchState.icon} me-1"></i>${ownMatchState.text}</button>` : ''}
             ${showReport ? `<button class="btn btn-outline-danger mt-2" type="button" data-report="${item.id}"><i class="bi bi-flag me-1"></i>Report ride</button>` : ''}
@@ -476,6 +480,12 @@ const acceptRide = async (rideId, btn = null) => {
     const data = await res.json().catch(() => ({ ok: false }));
     if (!res.ok || !data.ok) {
       throw new Error(data.error || 'Unable to accept ride');
+    }
+    if (data.bot_ride_contact) {
+      clearAcceptIntent();
+      pendingAcceptIntent = null;
+      await fetchRides({ showLoading: false, reason: 'bot-contact' });
+      return;
     }
     const item = rawItems.find((ride) => Number(ride.id) === Number(rideId));
     if (item) {

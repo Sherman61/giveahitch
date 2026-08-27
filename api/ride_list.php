@@ -200,7 +200,6 @@ try {
       $r['other_role']     = $r['owner_role'] === 'driver' ? 'passenger' : 'driver';
 
       $ownerPrivacy = (int)($r['owner_contact_privacy'] ?? 1);
-
       $visibility = \App\Privacy\evaluate($user, [
         'privacy' => $ownerPrivacy,
         'viewer_is_owner' => $viewerIsOwner,

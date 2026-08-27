@@ -23,10 +23,17 @@ $pdo = db();
 $pdo->beginTransaction();
 
 /* Lock ride and read it */
-$stmt = $pdo->prepare("SELECT id,user_id,type,status,from_text,to_text FROM rides WHERE id=:id AND deleted=0 FOR UPDATE");
+$stmt = $pdo->prepare("SELECT id,user_id,type,status,from_text,to_text,created_via FROM rides WHERE id=:id AND deleted=0 FOR UPDATE");
 $stmt->execute([':id'=>$rideId]);
 $ride = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$ride) { $pdo->rollBack(); http_response_code(404); echo json_encode(['ok'=>false,'error'=>'not_found']); exit; }
+
+// Bot rides are contact listings, not website-member-to-member matches.
+if (($ride['created_via'] ?? '') === 'whatsapp_bot' || empty($ride['user_id'])) {
+  $pdo->rollBack();
+  echo json_encode(['ok'=>true,'status'=>'contact','bot_ride_contact'=>true]);
+  exit;
+}
 
 $me = current_user();
 $meId = (int)$me['id'];
