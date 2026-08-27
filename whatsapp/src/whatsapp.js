@@ -29,13 +29,19 @@ async function intakeApi(action, body = {}) {
 function parseRideText(text) {
   const value = text.trim();
   const type = /\b(offer(?:ing)?|drive|available)\b/i.test(value) ? 'offer' : /\b(looking|need|request)\b/i.test(value) ? 'request' : null;
-  const route = value.match(/\bfrom\s+([\p{L} .'-]{2,}?)\s+(?:to|→|->)\s*([\p{L} .'-]{2,}?)(?=\s*(?:\+?\d|$|[,.]))/iu)
-    || value.match(/\b([\p{L} .'-]{2,}?)\s*(?:→|->)\s*([\p{L} .'-]{2,}?)(?=\s*(?:\+?\d|$|[,.]))/iu);
-  const numberMatches = [...value.matchAll(/\+?[\d()\s-]{7,}/g)];
-  const numbers = numberMatches.map((match) => match[0].trim());
-  const noteStart = numberMatches[0] ? numberMatches[0].index + numberMatches[0][0].length : value.length;
-  const note = value.slice(noteStart).replace(/^[\s,.;:—-]+/, '').trim() || null;
-  return { type, from_text: route?.[1]?.trim() || null, to_text: route?.[2]?.trim() || null, note, phone: numbers[0] || null, whatsapp: numbers[1] || null };
+  const boundary = '(?=\\s+(?:call|whatsapp|note)\\b|$|[,.])';
+  const route = value.match(new RegExp(`\\bfrom\\s+([\\p{L} .'-]{2,}?)\\s+to\\s+([\\p{L} .'-]{2,}?)${boundary}`, 'iu'))
+    || value.match(/\b([\p{L} .'-]{2,}?)\s*(?:→|->)\s*([\p{L} .'-]{2,}?)(?=\s*(?:call|whatsapp|note)\b|$|[,.])/iu);
+  const phoneMatch = value.match(/\bcall\s*:?\s*(\+?[\d()\s-]{7,})(?=\s*(?:,|\b(?:whatsapp|note)\b|$))/i);
+  const whatsappMatch = value.match(/\bwhatsapp\s*:?\s*(\+?[\d()\s-]{7,})(?=\s*(?:,|\b(?:call|note)\b|$))/i);
+  const allNumbers = [...value.matchAll(/\+?[\d()\s-]{7,}/g)].map((match) => match[0].trim());
+  const phone = phoneMatch?.[1].trim() || allNumbers[0] || null;
+  const whatsapp = whatsappMatch?.[1].trim() || null;
+  const noteMatch = value.match(/\bnote\s*:?\s*(.+)$/is);
+  const lastContact = Math.max(phoneMatch ? phoneMatch.index + phoneMatch[0].length : -1, whatsappMatch ? whatsappMatch.index + whatsappMatch[0].length : -1);
+  const trailingNote = lastContact >= 0 ? value.slice(lastContact).replace(/^[\s,.;:—-]+/, '').trim() : '';
+  const note = (noteMatch?.[1] || trailingNote || '').trim() || null;
+  return { type, from_text: route?.[1]?.trim() || null, to_text: route?.[2]?.trim() || null, note, phone, whatsapp };
 }
 
 async function dm(jid, text) { await socket.sendMessage(jid, { text }); }
@@ -45,7 +51,7 @@ async function handleGroupIntake(message) {
   const suggested = parseRideText(text);
   const result = await intakeApi('intake', { ride: { ...message, text, ...suggested } });
   workflow = result.workflow || workflow;
-  const format = 'Format: @ridebot Looking from Kingston to Montego Bay 876-555-1234. You may add a note after the number.';
+  const format = 'Format: @ridebot Looking from Kingston to Montego Bay call: 876-555-1234 whatsapp: 876-555-9999 note: Need to arrive before 5 PM. Call and WhatsApp may be different; WhatsApp is optional.';
   if (result.mode === 'manual') { if (workflow.action_private_dm) await dm(message.senderJid, `Status: received — pending admin review.\n\n${format}`); return; }
   if (workflow.condition_format && !result.complete) { if (workflow.action_private_dm) await dm(message.senderJid, `Status: more details needed.\n\n${format}\n\nPlease send the missing details in a direct reply.`); return; }
   if (workflow.condition_confirm) { if (workflow.action_private_dm) await dm(message.senderJid, `Status: awaiting your confirmation.\n\nRide preview:\n${formatRide({ ...suggested })}\n\nReply CONFIRM to post it, or CANCEL to stop.`); return; }
