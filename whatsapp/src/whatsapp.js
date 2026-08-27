@@ -73,7 +73,26 @@ function formatRide(ride) {
 
 async function handlePrivateIntake(message) {
   const command = message.text.trim().toUpperCase();
-  if (!workflow.trigger_confirm || !['CONFIRM', 'CANCEL'].includes(command)) return;
+  if (command === 'START' || command === 'HELP') {
+    await dm(message.senderJid, workflow.format_help || 'Send: Looking from City to City call: 1234567890 note: Optional note');
+    return;
+  }
+  if (!['CONFIRM', 'CANCEL'].includes(command)) {
+    const suggested = parseRideText(message.text);
+    const result = await intakeApi('intake', { ride: { ...message, groupJid: config.trackedGroupJids[0], text: message.text, ...suggested } });
+    workflow = result.workflow || workflow;
+    const format = workflow.format_help || 'Send: Looking from City to City call: 1234567890 note: Optional note';
+    if (result.mode === 'manual') { if (workflow.action_private_dm) await dm(message.senderJid, `Status: received — pending admin review.\n\n${format}`); return; }
+    if (workflow.condition_format && !result.complete) {
+      const missing = [!suggested.type && 'ride type (Looking or Offering)', !suggested.from_text && 'departure city (From)', !suggested.to_text && 'destination (To or Going to)', !suggested.phone && !suggested.whatsapp && 'contact number (Call or WhatsApp)'].filter(Boolean);
+      if (workflow.action_private_dm) await dm(message.senderJid, `Status: more details needed.\nMissing: ${missing.join(', ')}.\n\n${format}`);
+      return;
+    }
+    if (workflow.condition_confirm) { if (workflow.action_private_dm) await dm(message.senderJid, `Status: awaiting your confirmation.\n\nRide preview:\n${formatRide(suggested)}\n\nReply CONFIRM to post it, or CANCEL to stop.`); return; }
+    if (workflow.action_post_group) { const messageId = await publishRideToWhatsApp({ ...suggested, groupJid: config.trackedGroupJids[0], source_sender_jid: message.senderJid }); await intakeApi('mark_posted', { id: result.id, messageId, createRide: workflow.action_create_ride }); }
+    return;
+  }
+  if (!workflow.trigger_confirm) return;
   const pending = await intakeApi('pending_for_sender', { senderJid: message.senderJid });
   const intake = pending.intake;
   workflow = pending.workflow || workflow;
