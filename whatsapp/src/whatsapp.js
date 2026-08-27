@@ -31,8 +31,11 @@ function parseRideText(text) {
   const type = /\b(offer(?:ing)?|drive|available)\b/i.test(value) ? 'offer' : /\b(looking|need|request)\b/i.test(value) ? 'request' : null;
   const route = value.match(/\bfrom\s+([\p{L} .'-]{2,}?)\s+(?:to|→|->)\s*([\p{L} .'-]{2,}?)(?=\s*(?:\+?\d|$|[,.]))/iu)
     || value.match(/\b([\p{L} .'-]{2,}?)\s*(?:→|->)\s*([\p{L} .'-]{2,}?)(?=\s*(?:\+?\d|$|[,.]))/iu);
-  const numbers = value.match(/\+?[\d()\s-]{7,}/g) || [];
-  return { type, from_text: route?.[1]?.trim() || null, to_text: route?.[2]?.trim() || null, note: value, phone: numbers[0]?.trim() || null, whatsapp: numbers[1]?.trim() || null };
+  const numberMatches = [...value.matchAll(/\+?[\d()\s-]{7,}/g)];
+  const numbers = numberMatches.map((match) => match[0].trim());
+  const noteStart = numberMatches[0] ? numberMatches[0].index + numberMatches[0][0].length : value.length;
+  const note = value.slice(noteStart).replace(/^[\s,.;:—-]+/, '').trim() || null;
+  return { type, from_text: route?.[1]?.trim() || null, to_text: route?.[2]?.trim() || null, note, phone: numbers[0] || null, whatsapp: numbers[1] || null };
 }
 
 async function dm(jid, text) { await socket.sendMessage(jid, { text }); }
