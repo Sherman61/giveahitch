@@ -1,4 +1,4 @@
-import { startWhatsApp, stopWhatsApp, publishRideToWhatsApp } from './whatsapp.js';
+import { startWhatsApp, stopWhatsApp, publishRideToWhatsApp, sendDirectWhatsAppNotification } from './whatsapp.js';
 import { config } from './config.js';
 import { dashboard, startDashboard } from './dashboard.js';
 
@@ -13,7 +13,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   });
 }
 
-dashboard.setRidePublisher(publishRideToWhatsApp);
+dashboard.setRidePublisher((payload) => payload.kind === 'notification' ? sendDirectWhatsAppNotification(payload) : publishRideToWhatsApp(payload));
 startDashboard(config);
 startWhatsApp().catch((error) => {
   dashboard.log.error({ error: error.message }, 'Unable to start WhatsApp bridge');

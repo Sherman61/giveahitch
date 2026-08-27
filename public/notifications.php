@@ -147,6 +147,13 @@ $bootstrap = [
                 </label>
                 <div class="form-text">Stay in the loop as confirmed rides move forward.</div>
               </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="settingWhatsAppRideUpdates" name="whatsapp_ride_updates">
+                <label class="form-check-label" for="settingWhatsAppRideUpdates">
+                  WhatsApp ride updates
+                </label>
+                <div class="form-text">Send ride updates to the WhatsApp number saved in your profile. You can turn this off at any time.</div>
+              </div>
             </form>
             <div id="settingsSaved" class="small text-success mt-3 d-none">
               Preferences updated.

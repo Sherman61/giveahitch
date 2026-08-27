@@ -519,8 +519,10 @@ const applySettingsToForm = () => {
   if (!settingsForm) return;
   const rideInput = settingsForm.querySelector('input[name="ride_activity"]');
   const matchInput = settingsForm.querySelector('input[name="match_activity"]');
+  const whatsappInput = settingsForm.querySelector('input[name="whatsapp_ride_updates"]');
   if (rideInput) rideInput.checked = !!state.settings?.ride_activity;
   if (matchInput) matchInput.checked = !!state.settings?.match_activity;
+  if (whatsappInput) whatsappInput.checked = !!state.settings?.whatsapp_ride_updates;
 };
 
 const saveSettings = async () => {
@@ -529,10 +531,12 @@ const saveSettings = async () => {
   settingsSaved?.classList.add('d-none');
   const rideInput = settingsForm.querySelector('input[name="ride_activity"]');
   const matchInput = settingsForm.querySelector('input[name="match_activity"]');
+  const whatsappInput = settingsForm.querySelector('input[name="whatsapp_ride_updates"]');
   const payload = {
     action: 'settings',
     ride_activity: rideInput && rideInput.checked,
     match_activity: matchInput && matchInput.checked,
+    whatsapp_ride_updates: whatsappInput && whatsappInput.checked,
   };
   try {
     const resp = await fetch(`${API_BASE}/notifications.php`, {

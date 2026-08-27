@@ -72,6 +72,7 @@ if ($method === 'POST') {
         $settings = [
             'ride_activity' => !empty($input['ride_activity']),
             'match_activity' => !empty($input['match_activity']),
+            'whatsapp_ride_updates' => !empty($input['whatsapp_ride_updates']),
         ];
         $saved = \App\Notifications\update_settings($pdo, $uid, $settings);
         send(200, ['ok' => true, 'settings' => $saved]);

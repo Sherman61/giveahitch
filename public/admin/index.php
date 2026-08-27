@@ -45,6 +45,7 @@ $adminPages = \App\AdminPages\all();
         <a class="btn btn-outline-success btn-sm" href="/admin/whatsapp_intakes.php"><i class="bi bi-chat-square-text me-1"></i>WhatsApp intake</a>
         <a class="btn btn-outline-primary btn-sm" href="/admin/whatsapp_workflow.php"><i class="bi bi-diagram-3 me-1"></i>WhatsApp workflow</a>
         <a class="btn btn-outline-primary btn-sm" href="/admin/whatsapp_private_control.php"><i class="bi bi-chat-dots me-1"></i>Private bot trigger</a>
+        <a class="btn btn-primary btn-sm" href="/admin/whatsapp_controls.php"><i class="bi bi-whatsapp me-1"></i>WhatsApp controls</a>
         <a class="btn btn-outline-secondary btn-sm" href="/rides.php"><i class="bi bi-arrow-left me-1"></i>Back to site</a>
       </div>
     </header>

@@ -28,6 +28,7 @@ function default_settings(): array
     return [
         'ride_activity'  => true,
         'match_activity' => true,
+        'whatsapp_ride_updates' => false,
     ];
 }
 
@@ -38,7 +39,7 @@ function get_settings(PDO $pdo, int $userId): array
         return default_settings();
     }
 
-    $stmt = $pdo->prepare('SELECT ride_activity, match_activity FROM notification_settings WHERE user_id = :uid LIMIT 1');
+    $stmt = $pdo->prepare('SELECT ride_activity, match_activity, whatsapp_ride_updates FROM notification_settings WHERE user_id = :uid LIMIT 1');
     $stmt->execute([':uid' => $userId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -49,6 +50,7 @@ function get_settings(PDO $pdo, int $userId): array
     return [
         'ride_activity'  => (bool)$row['ride_activity'],
         'match_activity' => (bool)$row['match_activity'],
+        'whatsapp_ride_updates' => (bool)$row['whatsapp_ride_updates'],
     ];
 }
 
@@ -62,21 +64,24 @@ function update_settings(PDO $pdo, int $userId, array $settings): array
     $defaults = default_settings();
     $rideActivity = (bool)($settings['ride_activity'] ?? $defaults['ride_activity']);
     $matchActivity = (bool)($settings['match_activity'] ?? $defaults['match_activity']);
+    $whatsappRideUpdates = (bool)($settings['whatsapp_ride_updates'] ?? $defaults['whatsapp_ride_updates']);
 
-    $sql = 'INSERT INTO notification_settings (user_id, ride_activity, match_activity, updated_at)
-            VALUES (:uid, :ride, :match, NOW())
-            ON DUPLICATE KEY UPDATE ride_activity = VALUES(ride_activity), match_activity = VALUES(match_activity), updated_at = VALUES(updated_at)';
+    $sql = 'INSERT INTO notification_settings (user_id, ride_activity, match_activity, whatsapp_ride_updates, updated_at)
+            VALUES (:uid, :ride, :match, :whatsapp, NOW())
+            ON DUPLICATE KEY UPDATE ride_activity = VALUES(ride_activity), match_activity = VALUES(match_activity), whatsapp_ride_updates = VALUES(whatsapp_ride_updates), updated_at = VALUES(updated_at)';
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute([
         ':uid'   => $userId,
         ':ride'  => $rideActivity ? 1 : 0,
         ':match' => $matchActivity ? 1 : 0,
+        ':whatsapp' => $whatsappRideUpdates ? 1 : 0,
     ]);
 
     return [
         'ride_activity'  => $rideActivity,
         'match_activity' => $matchActivity,
+        'whatsapp_ride_updates' => $whatsappRideUpdates,
     ];
 }
 
@@ -641,6 +646,20 @@ function send_push_notification(PDO $pdo, array $notification): void
     deliver_push_notification($pdo, $notification);
 }
 
+function send_whatsapp_notification(PDO $pdo, array $notification): void
+{
+    $userId = (int)($notification['user_id'] ?? 0);
+    if ($userId <= 0 || empty(get_settings($pdo, $userId)['whatsapp_ride_updates'])) return;
+    $stmt = $pdo->prepare('SELECT whatsapp FROM users WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $userId]);
+    $number = (string)($stmt->fetchColumn() ?: '');
+    if ($number === '') return;
+    $text = trim((string)($notification['title'] ?? '') . "\n" . (string)($notification['body'] ?? ''));
+    $ch = curl_init('http://127.0.0.1:3000/publish-ride');
+    curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode(['kind' => 'notification', 'whatsapp' => $number, 'text' => $text]), CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8]);
+    curl_exec($ch); curl_close($ch);
+}
+
 /**
  * Persist a notification row for a user after settings checks pass.
  *
@@ -706,6 +725,7 @@ function create(PDO $pdo, array $data): ?array
     $unread = unread_count($pdo, $userId);
     broadcast_notification($notification, $unread);
     send_push_notification($pdo, $notification);
+    send_whatsapp_notification($pdo, $notification);
 
     return $notification;
 }

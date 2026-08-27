@@ -236,3 +236,10 @@ export async function publishRideToWhatsApp(ride) {
   }
   return sent.key.id;
 }
+
+export async function sendDirectWhatsAppNotification(notification) {
+  const digits = String(notification.whatsapp || '').replace(/\D/g, '');
+  if (!socket || digits.length < 7) throw new Error('No valid WhatsApp number or active connection');
+  const sent = await socket.sendMessage(`${digits}@s.whatsapp.net`, { text: `Glitch a Hitch update\n\n${notification.text}` });
+  return sent.key.id;
+}
