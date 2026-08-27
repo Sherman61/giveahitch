@@ -28,16 +28,20 @@ async function intakeApi(action, body = {}) {
 
 function parseRideText(text) {
   const value = text.trim();
-  const type = /\b(offer(?:ing)?|drive|available)\b/i.test(value) ? 'offer' : /\b(looking|need|request)\b/i.test(value) ? 'request' : null;
-  const boundary = '(?=\\s+(?:call|whatsapp|note)\\b|$|[,.])';
-  const route = value.match(new RegExp(`\\bfrom\\s+([\\p{L} .'-]{2,}?)\\s+to\\s+([\\p{L} .'-]{2,}?)${boundary}`, 'iu'))
-    || value.match(/\b([\p{L} .'-]{2,}?)\s*(?:→|->)\s*([\p{L} .'-]{2,}?)(?=\s*(?:call|whatsapp|note)\b|$|[,.])/iu);
-  const phoneMatch = value.match(/\bcall\s*:?\s*(\+?[\d()\s-]{7,})(?=\s*(?:,|\b(?:whatsapp|note)\b|$))/i);
-  const whatsappMatch = value.match(/\bwhatsapp\s*:?\s*(\+?[\d()\s-]{7,})(?=\s*(?:,|\b(?:call|note)\b|$))/i);
+  const defaults = { looking: 'looking,need,request', offering: 'offering,offer,drive,available', from: 'from', to: 'to', going_to: 'going to,going-to', call: 'call', whatsapp: 'whatsapp', note: 'note' };
+  const words = { ...defaults, ...(workflow.keywords || {}) };
+  const alternatives = (key) => words[key].split(',').map((item) => item.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).filter(Boolean).join('|');
+  const type = new RegExp(`\\b(?:${alternatives('offering')})\\b`, 'i').test(value) ? 'offer' : new RegExp(`\\b(?:${alternatives('looking')})\\b`, 'i').test(value) ? 'request' : null;
+  const destination = `(?:${alternatives('to')}|${alternatives('going_to')})`;
+  const boundary = `(?=\\s+(?:${alternatives('call')}|${alternatives('whatsapp')}|${alternatives('note')})\\b|$|[,.])`;
+  const route = value.match(new RegExp(`\\b(?:${alternatives('from')})\\s+([\\p{L} .'-]{2,}?)\\s+${destination}\\s+([\\p{L} .'-]{2,}?)${boundary}`, 'iu'))
+    || value.match(new RegExp(`\\b([\\p{L} .'-]{2,}?)\\s*(?:→|->)\\s*([\\p{L} .'-]{2,}?)(?=\\s*(?:${alternatives('call')}|${alternatives('whatsapp')}|${alternatives('note')})\\b|$|[,.])`, 'iu'));
+  const phoneMatch = value.match(new RegExp(`\\b(?:${alternatives('call')})\\s*:?\\s*(\\+?[\\d()\\s-]{7,})(?=\\s*(?:,|\\b(?:${alternatives('whatsapp')}|${alternatives('note')})\\b|$))`, 'i'));
+  const whatsappMatch = value.match(new RegExp(`\\b(?:${alternatives('whatsapp')})\\s*:?\\s*(\\+?[\\d()\\s-]{7,})(?=\\s*(?:,|\\b(?:${alternatives('call')}|${alternatives('note')})\\b|$))`, 'i'));
   const allNumbers = [...value.matchAll(/\+?[\d()\s-]{7,}/g)].map((match) => match[0].trim());
   const phone = phoneMatch?.[1].trim() || allNumbers[0] || null;
   const whatsapp = whatsappMatch?.[1].trim() || null;
-  const noteMatch = value.match(/\bnote\s*:?\s*(.+)$/is);
+  const noteMatch = value.match(new RegExp(`\\b(?:${alternatives('note')})\\s*:?\\s*(.+)$`, 'is'));
   const lastContact = Math.max(phoneMatch ? phoneMatch.index + phoneMatch[0].length : -1, whatsappMatch ? whatsappMatch.index + whatsappMatch[0].length : -1);
   const trailingNote = lastContact >= 0 ? value.slice(lastContact).replace(/^[\s,.;:—-]+/, '').trim() : '';
   const note = (noteMatch?.[1] || trailingNote || '').trim() || null;
@@ -51,9 +55,13 @@ async function handleGroupIntake(message) {
   const suggested = parseRideText(text);
   const result = await intakeApi('intake', { ride: { ...message, text, ...suggested } });
   workflow = result.workflow || workflow;
-  const format = 'Format: @ridebot Looking from Kingston to Montego Bay call: 876-555-1234 whatsapp: 876-555-9999 note: Need to arrive before 5 PM. Call and WhatsApp may be different; WhatsApp is optional.';
+  const format = workflow.format_help || 'Format: @ridebot Looking from Kingston to Montego Bay call: 876-555-1234 whatsapp: 876-555-9999 note: Need to arrive before 5 PM.';
   if (result.mode === 'manual') { if (workflow.action_private_dm) await dm(message.senderJid, `Status: received — pending admin review.\n\n${format}`); return; }
-  if (workflow.condition_format && !result.complete) { if (workflow.action_private_dm) await dm(message.senderJid, `Status: more details needed.\n\n${format}\n\nPlease send the missing details in a direct reply.`); return; }
+  if (workflow.condition_format && !result.complete) {
+    const missing = [!suggested.type && 'ride type (Looking or Offering)', !suggested.from_text && 'departure city (From)', !suggested.to_text && 'destination (To or Going to)', !suggested.phone && !suggested.whatsapp && 'contact number (Call or WhatsApp)'].filter(Boolean);
+    if (workflow.action_private_dm) await dm(message.senderJid, `Status: more details needed.\nMissing: ${missing.join(', ')}.\n\n${format}\n\nPlease send the missing details in a direct reply.`);
+    return;
+  }
   if (workflow.condition_confirm) { if (workflow.action_private_dm) await dm(message.senderJid, `Status: awaiting your confirmation.\n\nRide preview:\n${formatRide({ ...suggested })}\n\nReply CONFIRM to post it, or CANCEL to stop.`); return; }
   if (workflow.action_post_group) { const messageId = await publishRideToWhatsApp({ ...suggested, groupJid: message.groupJid, source_sender_jid: message.senderJid }); await intakeApi('mark_posted', { id: result.id, messageId, createRide: workflow.action_create_ride }); }
 }
