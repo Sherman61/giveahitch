@@ -17,6 +17,7 @@ const groupCache = new Map();
 let socket;
 let reconnectTimer;
 let stopping = false;
+let workflow = { trigger_mention: true, trigger_all_group: false, trigger_confirm: true, condition_format: true, condition_confirm: true, action_private_dm: true, action_queue: true, action_post_group: true, action_create_ride: true };
 
 async function intakeApi(action, body = {}) {
   const response = await fetch(`${config.internalWebsiteUrl}/api/internal/whatsapp_intake.php`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bridge-Token': config.internalApiToken }, body: JSON.stringify({ action, ...body }) });
@@ -40,10 +41,12 @@ async function handleGroupIntake(message) {
   const text = message.text.replace(/@ridebot\b/ig, '').trim();
   const suggested = parseRideText(text);
   const result = await intakeApi('intake', { ride: { ...message, text, ...suggested } });
+  workflow = result.workflow || workflow;
   const format = 'Format: @ridebot Looking from Kingston to Montego Bay 876-555-1234. You may add a note after the number.';
-  if (result.mode === 'manual') { await dm(message.senderJid, `Status: received — pending admin review.\n\n${format}`); return; }
-  if (!result.complete) { await dm(message.senderJid, `Status: more details needed.\n\n${format}\n\nPlease send the missing details in a direct reply.`); return; }
-  await dm(message.senderJid, `Status: awaiting your confirmation.\n\nRide preview:\n${formatRide({ ...suggested })}\n\nReply CONFIRM to post it, or CANCEL to stop.`);
+  if (result.mode === 'manual') { if (workflow.action_private_dm) await dm(message.senderJid, `Status: received — pending admin review.\n\n${format}`); return; }
+  if (workflow.condition_format && !result.complete) { if (workflow.action_private_dm) await dm(message.senderJid, `Status: more details needed.\n\n${format}\n\nPlease send the missing details in a direct reply.`); return; }
+  if (workflow.condition_confirm) { if (workflow.action_private_dm) await dm(message.senderJid, `Status: awaiting your confirmation.\n\nRide preview:\n${formatRide({ ...suggested })}\n\nReply CONFIRM to post it, or CANCEL to stop.`); return; }
+  if (workflow.action_post_group) { const messageId = await publishRideToWhatsApp({ ...suggested, groupJid: message.groupJid, source_sender_jid: message.senderJid }); await intakeApi('mark_posted', { id: result.id, messageId, createRide: workflow.action_create_ride }); }
 }
 
 function formatRide(ride) {
@@ -53,14 +56,16 @@ function formatRide(ride) {
 
 async function handlePrivateIntake(message) {
   const command = message.text.trim().toUpperCase();
-  if (!['CONFIRM', 'CANCEL'].includes(command)) return;
+  if (!workflow.trigger_confirm || !['CONFIRM', 'CANCEL'].includes(command)) return;
   const pending = await intakeApi('pending_for_sender', { senderJid: message.senderJid });
   const intake = pending.intake;
+  workflow = pending.workflow || workflow;
   if (!intake) { await dm(message.senderJid, 'I do not have a pending ride for you. Post a ride request in Test rides first.'); return; }
   if (command === 'CANCEL') { await intakeApi('cancel', { id: intake.id }); await dm(message.senderJid, 'Your ride request was cancelled.'); return; }
-  if (pending.mode !== 'automatic') { await dm(message.senderJid, 'Your ride is awaiting admin review.'); return; }
+  if (pending.mode !== 'automatic') { if (workflow.action_private_dm) await dm(message.senderJid, 'Your ride is awaiting admin review.'); return; }
+  if (!workflow.action_post_group) return;
   const messageId = await publishRideToWhatsApp({ ...intake, groupJid: intake.source_group_jid });
-  await intakeApi('mark_posted', { id: intake.id, messageId });
+  await intakeApi('mark_posted', { id: intake.id, messageId, createRide: workflow.action_create_ride });
 }
 
 async function groupNameFor(groupJid) {
@@ -95,7 +100,8 @@ async function handleMessages({ messages, type }) {
     }
 
     dashboard.addGroupMessage(normalized);
-    if (!/@ridebot\b/i.test(normalized.text)) continue;
+    if (workflow.trigger_mention && !/@ridebot\b/i.test(normalized.text)) continue;
+    if (!workflow.trigger_mention && !workflow.trigger_all_group) continue;
     await handleGroupIntake(normalized);
     logger.info({ messageId: normalized.messageId, groupJid: normalized.groupJid }, 'Incoming tracked group message');
   }
@@ -115,6 +121,7 @@ export async function startWhatsApp() {
   await fs.mkdir(config.authDir, { recursive: true, mode: 0o700 });
   const { state, saveCreds } = await useMultiFileAuthState(config.authDir);
   const { version } = await fetchLatestBaileysVersion();
+  try { workflow = (await intakeApi('workflow')).workflow || workflow; } catch (error) { logger.warn({ error: error.message }, 'Could not load workflow controls'); }
   dashboard.setTrackedGroups(config.trackedGroupJids);
 
   socket = makeWASocket({
