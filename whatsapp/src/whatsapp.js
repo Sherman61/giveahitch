@@ -100,7 +100,7 @@ async function handleMessages({ messages, type }) {
     }
 
     dashboard.addGroupMessage(normalized);
-    if (workflow.trigger_mention && !/@ridebot\b/i.test(normalized.text)) continue;
+    if (!workflow.trigger_all_group && workflow.trigger_mention && !/@ridebot\b/i.test(normalized.text)) continue;
     if (!workflow.trigger_mention && !workflow.trigger_all_group) continue;
     await handleGroupIntake(normalized);
     logger.info({ messageId: normalized.messageId, groupJid: normalized.groupJid }, 'Incoming tracked group message');
