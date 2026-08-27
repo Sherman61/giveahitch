@@ -17,7 +17,9 @@ const groupCache = new Map();
 let socket;
 let reconnectTimer;
 let stopping = false;
-let workflow = { trigger_mention: true, trigger_all_group: false, trigger_confirm: true, condition_format: true, condition_confirm: true, action_private_dm: true, action_queue: true, action_post_group: true, action_create_ride: true };
+let workflow = { trigger_mention: true, trigger_all_group: false, trigger_confirm: true, trigger_private_mention: true, bot_mention: '@ridebot', condition_format: true, condition_confirm: true, action_private_dm: true, action_queue: true, action_post_group: true, action_create_ride: true };
+function hasBotMention(text) { return text.toLowerCase().includes((workflow.bot_mention || '@ridebot').toLowerCase()); }
+function removeBotMention(text) { return text.replace(new RegExp((workflow.bot_mention || '@ridebot').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), '').trim(); }
 
 async function intakeApi(action, body = {}) {
   const response = await fetch(`${config.internalWebsiteUrl}/api/internal/whatsapp_intake.php`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bridge-Token': config.internalApiToken }, body: JSON.stringify({ action, ...body }) });
@@ -51,7 +53,7 @@ function parseRideText(text) {
 async function dm(jid, text) { await socket.sendMessage(jid, { text }); }
 
 async function handleGroupIntake(message) {
-  const text = message.text.replace(/@ridebot\b/ig, '').trim();
+  const text = removeBotMention(message.text);
   const suggested = parseRideText(text);
   const result = await intakeApi('intake', { ride: { ...message, text, ...suggested } });
   workflow = result.workflow || workflow;
@@ -72,14 +74,17 @@ function formatRide(ride) {
 }
 
 async function handlePrivateIntake(message) {
-  const command = message.text.trim().toUpperCase();
+  const command = removeBotMention(message.text).toUpperCase();
+  const requiresTag = workflow.trigger_private_mention && !['CONFIRM', 'CANCEL'].includes(command);
+  if (requiresTag && !hasBotMention(message.text)) return;
   if (command === 'START' || command === 'HELP') {
     await dm(message.senderJid, workflow.format_help || 'Send: Looking from City to City call: 1234567890 note: Optional note');
     return;
   }
   if (!['CONFIRM', 'CANCEL'].includes(command)) {
-    const suggested = parseRideText(message.text);
-    const result = await intakeApi('intake', { ride: { ...message, groupJid: config.trackedGroupJids[0], text: message.text, ...suggested } });
+    const text = removeBotMention(message.text);
+    const suggested = parseRideText(text);
+    const result = await intakeApi('intake', { ride: { ...message, groupJid: config.trackedGroupJids[0], text, ...suggested } });
     workflow = result.workflow || workflow;
     const format = workflow.format_help || 'Send: Looking from City to City call: 1234567890 note: Optional note';
     if (result.mode === 'manual') { if (workflow.action_private_dm) await dm(message.senderJid, `Status: received — pending admin review.\n\n${format}`); return; }
@@ -136,7 +141,7 @@ async function handleMessages({ messages, type }) {
     }
 
     dashboard.addGroupMessage(normalized);
-    if (!workflow.trigger_all_group && workflow.trigger_mention && !/@ridebot\b/i.test(normalized.text)) continue;
+    if (!workflow.trigger_all_group && workflow.trigger_mention && !hasBotMention(normalized.text)) continue;
     if (!workflow.trigger_mention && !workflow.trigger_all_group) continue;
     await handleGroupIntake(normalized);
     logger.info({ messageId: normalized.messageId, groupJid: normalized.groupJid }, 'Incoming tracked group message');
