@@ -34,25 +34,59 @@ if ($meId === (int)$ride['user_id']) { $pdo->rollBack(); http_response_code(409)
 
 $roleMap = map_joiner_roles($ride, $meId);
 
-/* Insert PENDING; unique index prevents duplicates from same pair */
-$ins = $pdo->prepare("
-  INSERT INTO ride_matches(ride_id,driver_user_id,passenger_user_id,status)
-  VALUES(:rid,:d,:p,'pending')
-");
-try {
-  $ins->execute([
-    ':rid'=>$rideId,
-    ':d'=>$roleMap['driver_user_id'],
-    ':p'=>$roleMap['passenger_user_id'],
-  ]);
-  $matchId = (int)$pdo->lastInsertId();
-} catch (\PDOException $e) {
-  // duplicate or other error
-  $pdo->rollBack();
-  if ($e->getCode()==='23000') { // duplicate
-    http_response_code(409); echo json_encode(['ok'=>false,'error'=>'duplicate']); exit;
+/*
+ * One row is kept per ride/member pair. A second click (or a browser retry)
+ * must therefore be safe: return the already-pending request instead of
+ * surfacing MySQL's unique-key "duplicate" error to the member.
+ */
+$existing = $pdo->prepare("SELECT id, status FROM ride_matches
+  WHERE ride_id=:rid AND driver_user_id=:d AND passenger_user_id=:p
+  LIMIT 1 FOR UPDATE");
+$existing->execute([
+  ':rid'=>$rideId,
+  ':d'=>$roleMap['driver_user_id'],
+  ':p'=>$roleMap['passenger_user_id'],
+]);
+$match = $existing->fetch(PDO::FETCH_ASSOC);
+
+if ($match) {
+  $status = strtolower((string)$match['status']);
+  if (in_array($status, ['pending', 'accepted', 'confirmed', 'inprogress', 'completed'], true)) {
+    $pdo->commit();
+    echo json_encode([
+      'ok'=>true,
+      'status'=>$status === 'inprogress' ? 'in_progress' : $status,
+      'match_id'=>(int)$match['id'],
+      'already_requested'=>true,
+    ]);
+    exit;
   }
-  http_response_code(500); echo json_encode(['ok'=>false,'error'=>'db']); exit;
+
+  // A withdrawn or rejected request may be submitted again; reuse the row so
+  // it continues to satisfy the unique ride/member-pair constraint.
+  $pdo->prepare("UPDATE ride_matches
+    SET status='pending', confirmed_at=NULL, updated_at=NOW() WHERE id=:id")
+    ->execute([':id'=>(int)$match['id']]);
+  $matchId = (int)$match['id'];
+} else {
+  $ins = $pdo->prepare("
+    INSERT INTO ride_matches(ride_id,driver_user_id,passenger_user_id,status)
+    VALUES(:rid,:d,:p,'pending')
+  ");
+  try {
+    $ins->execute([
+      ':rid'=>$rideId,
+      ':d'=>$roleMap['driver_user_id'],
+      ':p'=>$roleMap['passenger_user_id'],
+    ]);
+    $matchId = (int)$pdo->lastInsertId();
+  } catch (\PDOException $e) {
+    $pdo->rollBack();
+    if ($e->getCode()==='23000') {
+      http_response_code(409); echo json_encode(['ok'=>false,'error'=>'duplicate']); exit;
+    }
+    http_response_code(500); echo json_encode(['ok'=>false,'error'=>'db']); exit;
+  }
 }
 
 $pdo->commit();
